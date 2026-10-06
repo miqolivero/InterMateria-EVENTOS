@@ -1,0 +1,101 @@
+.empresas-encabezado {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+.empresas-titulo {
+  font-size: 1.6rem;
+}
+
+.empresas-nueva {
+  padding: 9px 16px;
+  border-radius: var(--radio);
+  background-color: var(--color-primario);
+  color: #ffffff;
+  text-decoration: none;
+  font-size: 0.95rem;
+}
+
+.empresas-nueva:hover {
+  background-color: var(--color-primario-oscuro);
+}
+
+.empresas-mensaje {
+  padding: 24px;
+  text-align: center;
+  color: var(--color-suave);
+  background-color: var(--color-panel);
+  border: 1px solid var(--color-borde);
+  border-radius: var(--radio);
+}
+
+.empresas-error {
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  border-radius: var(--radio);
+  background-color: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+
+.empresas-tabla {
+  width: 100%;
+  background-color: var(--color-panel);
+  border: 1px solid var(--color-borde);
+  border-radius: var(--radio);
+  overflow: hidden;
+}
+
+.empresas-tabla th,
+.empresas-tabla td {
+  padding: 11px 14px;
+  text-align: left;
+  border-bottom: 1px solid var(--color-borde);
+  font-size: 0.93rem;
+}
+
+.empresas-tabla th {
+  background-color: #eef1f5;
+  font-weight: 600;
+  color: var(--color-suave);
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+}
+
+.empresas-tabla tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.empresas-acciones {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.empresas-editar {
+  color: var(--color-primario);
+  text-decoration: none;
+}
+
+.empresas-editar:hover {
+  text-decoration: underline;
+}
+
+.empresas-eliminar {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-peligro);
+  cursor: pointer;
+  font-size: 0.93rem;
+  font-family: inherit;
+}
+
+.empresas-eliminar:hover {
+  text-decoration: underline;
+}

@@ -1,0 +1,30 @@
+:root {
+  --color-fondo: #f4f5f7;
+  --color-panel: #ffffff;
+  --color-texto: #1f2933;
+  --color-suave: #6b7280;
+  --color-borde: #d8dce3;
+  --color-primario: #2563eb;
+  --color-primario-oscuro: #1d4ed8;
+  --color-peligro: #dc2626;
+  --radio: 8px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, "Segoe UI", Arial, sans-serif;
+  background-color: var(--color-fondo);
+  color: var(--color-texto);
+}
+
+h1 {
+  margin: 0;
+}
+
+table {
+  border-collapse: collapse;
+}

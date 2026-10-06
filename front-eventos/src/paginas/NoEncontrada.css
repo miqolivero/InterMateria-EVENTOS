@@ -1,0 +1,23 @@
+.no-encontrada {
+  text-align: center;
+  padding: 64px 16px;
+}
+
+.no-encontrada-titulo {
+  font-size: 3rem;
+  margin-bottom: 8px;
+}
+
+.no-encontrada-texto {
+  color: var(--color-suave);
+  margin-bottom: 24px;
+}
+
+.no-encontrada-volver {
+  color: var(--color-primario);
+  text-decoration: none;
+}
+
+.no-encontrada-volver:hover {
+  text-decoration: underline;
+}

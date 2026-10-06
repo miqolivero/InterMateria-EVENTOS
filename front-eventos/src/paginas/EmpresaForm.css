@@ -1,0 +1,98 @@
+.formulario {
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 24px;
+  background-color: var(--color-panel);
+  border: 1px solid var(--color-borde);
+  border-radius: var(--radio);
+}
+
+.formulario-titulo {
+  font-size: 1.4rem;
+  margin-bottom: 20px;
+}
+
+.formulario-mensaje {
+  padding: 24px;
+  text-align: center;
+  color: var(--color-suave);
+}
+
+.formulario-error {
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  border-radius: var(--radio);
+  background-color: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+
+.formulario-campos {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.formulario-label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-suave);
+}
+
+.formulario-input {
+  padding: 9px 12px;
+  border: 1px solid var(--color-borde);
+  border-radius: var(--radio);
+  font-size: 0.95rem;
+  font-family: inherit;
+  font-weight: 400;
+  color: var(--color-texto);
+  background-color: #ffffff;
+}
+
+.formulario-input:focus {
+  outline: 2px solid var(--color-primario);
+  outline-offset: -1px;
+  border-color: var(--color-primario);
+}
+
+.formulario-acciones {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 8px;
+}
+
+.formulario-guardar {
+  padding: 10px 20px;
+  border: none;
+  border-radius: var(--radio);
+  background-color: var(--color-primario);
+  color: #ffffff;
+  font-size: 0.95rem;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.formulario-guardar:hover:not(:disabled) {
+  background-color: var(--color-primario-oscuro);
+}
+
+.formulario-guardar:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.formulario-cancelar {
+  color: var(--color-suave);
+  text-decoration: none;
+  font-size: 0.95rem;
+}
+
+.formulario-cancelar:hover {
+  color: var(--color-texto);
+  text-decoration: underline;
+}
