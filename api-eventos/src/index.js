@@ -6,7 +6,8 @@ import empresasRoutes from "./routes/empresas.routes.js";
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(cors());
+// Solo el front puede consumir la API. Sin esto el navegador bloquea los pedidos.
+app.use(cors({ origin: process.env.FRONT_URL || "http://localhost:5173" }));
 app.use(express.json());
 
 app.use("/api/empresas", empresasRoutes);
