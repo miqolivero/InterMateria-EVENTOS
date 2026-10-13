@@ -99,3 +99,17 @@
 .empresas-eliminar:hover {
   text-decoration: underline;
 }
+
+.empresas-aviso {
+  padding: 11px 14px;
+  margin-bottom: 16px;
+  border-radius: var(--radio);
+  background-color: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1e40af;
+  font-size: 0.9rem;
+}
+
+.empresas-aviso a {
+  color: #1d4ed8;
+}

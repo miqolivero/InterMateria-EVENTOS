@@ -43,3 +43,35 @@
   background-color: var(--color-primario-oscuro);
   color: #ffffff;
 }
+
+.navbar-usuario {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+  color: var(--color-texto);
+}
+
+.navbar-rol {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background-color: #e5e9f0;
+  color: var(--color-suave);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.navbar-salir {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-peligro);
+  font-size: 0.9rem;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.navbar-salir:hover {
+  text-decoration: underline;
+}

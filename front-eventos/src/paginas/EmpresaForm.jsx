@@ -4,7 +4,7 @@ import {
   obtenerEmpresa,
   crearEmpresa,
   actualizarEmpresa
-} from "../servicios/axiosConfig";
+} from "../servicios/empresasService";
 import "./EmpresaForm.css";
 
 const FORMULARIO_VACIO = {
@@ -83,6 +83,8 @@ function EmpresaForm() {
     } catch (err) {
       if (err.response && err.response.status === 400) {
         setError(err.response.data.mensaje || "Los datos enviados no son validos.");
+      } else if (err.response && err.response.status === 403) {
+        setError("No tenes permiso para esta accion.");
       } else if (err.response && err.response.status === 404) {
         setError("Esa empresa ya no existe.");
       } else if (err.response) {

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { obtenerEmpresas, eliminarEmpresa } from "../servicios/axiosConfig";
+import { obtenerEmpresas, eliminarEmpresa } from "../servicios/empresasService";
+import { usuarioGuardado } from "../servicios/authService";
 import "./Empresas.css";
 
 function Empresas() {
@@ -8,6 +9,11 @@ function Empresas() {
   const [empresas, setEmpresas] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState("");
+
+  // Para mostrar u ocultar botones. El backend igual vuelve a controlar:
+  // esconder un boton no es seguridad.
+  const usuario = usuarioGuardado();
+  const esAdmin = usuario?.rol === "admin";
 
   // El array vacio hace que se ejecute una sola vez, al montar la pantalla.
   useEffect(() => {
@@ -38,7 +44,9 @@ function Empresas() {
       // La API ya borro: saco la fila del estado en vez de volver a pedir todo.
       setEmpresas(empresas.filter((empresa) => empresa.id_empresa !== id));
     } catch (err) {
-      if (err.response && err.response.status === 404) {
+      if (err.response?.status === 403) {
+        setError("Solo un administrador puede eliminar empresas.");
+      } else if (err.response?.status === 404) {
         setError("Esa empresa ya no existe.");
       } else {
         setError("No se pudo eliminar la empresa.");
@@ -54,17 +62,24 @@ function Empresas() {
     <section className="empresas">
       <div className="empresas-encabezado">
         <h1 className="empresas-titulo">Empresas</h1>
-        <Link className="empresas-nueva" to="/empresas/nueva">
-          Nueva empresa
-        </Link>
+        {usuario && (
+          <Link className="empresas-nueva" to="/empresas/nueva">
+            Nueva empresa
+          </Link>
+        )}
       </div>
 
       {error && <p className="empresas-error">{error}</p>}
 
-      {empresas.length === 0 ? (
-        <p className="empresas-mensaje">
-          Todavia no hay empresas cargadas.
+      {!usuario && (
+        <p className="empresas-aviso">
+          El listado es publico. Para crear o editar empresas hay que{" "}
+          <Link to="/login">iniciar sesion</Link>.
         </p>
+      )}
+
+      {empresas.length === 0 ? (
+        <p className="empresas-mensaje">Todavia no hay empresas cargadas.</p>
       ) : (
         <table className="empresas-tabla">
           <thead>
@@ -74,7 +89,7 @@ function Empresas() {
               <th>CUIT</th>
               <th>Email</th>
               <th>Telefono</th>
-              <th>Acciones</th>
+              {usuario && <th>Acciones</th>}
             </tr>
           </thead>
           <tbody>
@@ -85,23 +100,27 @@ function Empresas() {
                 <td>{empresa.cuit}</td>
                 <td>{empresa.email || "-"}</td>
                 <td>{empresa.telefono || "-"}</td>
-                <td className="empresas-acciones">
-                  <Link
-                    className="empresas-editar"
-                    to={`/empresas/${empresa.id_empresa}/editar`}
-                  >
-                    Editar
-                  </Link>
-                  <button
-                    className="empresas-eliminar"
-                    type="button"
-                    onClick={() =>
-                      manejarBorrado(empresa.id_empresa, empresa.nombre)
-                    }
-                  >
-                    Eliminar
-                  </button>
-                </td>
+                {usuario && (
+                  <td className="empresas-acciones">
+                    <Link
+                      className="empresas-editar"
+                      to={`/empresas/${empresa.id_empresa}/editar`}
+                    >
+                      Editar
+                    </Link>
+                    {esAdmin && (
+                      <button
+                        className="empresas-eliminar"
+                        type="button"
+                        onClick={() =>
+                          manejarBorrado(empresa.id_empresa, empresa.nombre)
+                        }
+                      >
+                        Eliminar
+                      </button>
+                    )}
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
