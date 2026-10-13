@@ -1,16 +1,95 @@
-# React + Vite
+# Front de Eventos
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Frontend en React + Vite que consume la API de `api-eventos`: listado de
+empresas, alta, edición y borrado, con login por JWT.
 
-Currently, two official plugins are available:
+## Requisitos
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- Node.js 18 o superior
+- La API corriendo en `http://localhost:3000`
 
-## React Compiler
+## Instalación
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+```bash
+npm install
+```
 
-## Expanding the Oxlint configuration
+## Variables de entorno
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+Copiar `.env.example` a `.env`:
+
+```
+VITE_API_URL=http://localhost:3000/api
+```
+
+El prefijo `VITE_` es obligatorio: sin él Vite no expone la variable. La URL de
+la API no se escribe en ningún componente.
+
+## Ejecutar
+
+```bash
+npm run dev     # http://localhost:5173
+npm run build
+npm run lint
+```
+
+El puerto está fijo en `vite.config.js` con `strictPort: true`, porque el CORS
+de la API solo acepta `http://localhost:5173`. Si el puerto está ocupado, Vite
+avisa y no arranca, en vez de pasarse al 5174 y que el navegador bloquee todo.
+
+## Pantallas
+
+| Ruta | Pantalla | Acceso |
+| --- | --- | --- |
+| `/` | Listado de empresas | Público |
+| `/login` | Iniciar sesión | Público |
+| `/registro` | Crear cuenta | Público |
+| `/empresas/nueva` | Alta de empresa | Con sesión |
+| `/empresas/:id/editar` | Edición | Con sesión |
+| `*` | 404 | Público |
+
+Las rutas con sesión están envueltas en `RutaProtegida`, que manda al login si
+no hay token. Eso es para la experiencia de usuario: **la seguridad real está en
+el backend**, porque cualquiera puede llamar a la API directamente.
+
+El botón de eliminar solo se muestra a los usuarios con rol `admin`, pero el que
+decide de verdad es el middleware de la API.
+
+## Cómo viaja el token
+
+El login guarda el token y el usuario en `localStorage`. A partir de ahí los
+interceptores de axios (`src/servicios/axiosConfig.js`) hacen el resto:
+
+- **Antes de cada petición** agregan el header `Authorization: Bearer <token>`.
+  Ningún componente tiene que acordarse de mandarlo.
+- **Después de cada respuesta**, si vuelve un 401 (token vencido o inválido),
+  borran el token y redirigen al login.
+
+Por eso todos los servicios tienen que usar la instancia `api` y no `axios`
+directo: si no, la petición sale sin token y la API responde 401.
+
+Cerrar sesión es simplemente borrar el token del navegador: con JWT el servidor
+no guarda sesiones.
+
+## Estructura
+
+```
+front-eventos/src/
+├── main.jsx                     envuelve la app en <BrowserRouter>
+├── App.jsx                      define las rutas
+├── servicios/
+│   ├── axiosConfig.js           instancia de axios + interceptores
+│   ├── authService.js           login, registro, perfil
+│   └── empresasService.js       una función por endpoint
+├── componentes/
+│   ├── Navbar.jsx               navegación, usuario y cerrar sesión
+│   └── RutaProtegida.jsx
+└── paginas/
+    ├── Empresas.jsx             listado
+    ├── EmpresaForm.jsx          alta y edición (mismo componente)
+    ├── Login.jsx
+    ├── Registro.jsx
+    └── NoEncontrada.jsx
+```
+
+Los estilos van en un `.css` por componente, al lado del `.jsx`.
