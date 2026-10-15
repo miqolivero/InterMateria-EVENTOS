@@ -20,6 +20,7 @@ npm install
 ```bash
 psql -U postgres -c "CREATE DATABASE eventos;"
 psql -U postgres -d eventos -f database/empresas.sql
+psql -U postgres -d eventos -f database/clientes.sql
 ```
 
 ## Variables de entorno
@@ -44,6 +45,31 @@ npm start
 
 Servidor en `http://localhost:3000`.
 
+## Clientes
+
+El módulo utiliza los campos de clientes del DER: empresa, nombre, apellido,
+DNI/CUIT, teléfono y email. Mantiene `empresas.id_empresa`, la clave existente,
+para conservar la compatibilidad con el CRUD de empresas.
+
+Todas las rutas de clientes requieren `Authorization: Bearer <token>`.
+
+| Método | Ruta | Acción |
+| --- | --- | --- |
+| GET | `/api/clientes?id_empresa=1` | Listar; el filtro por empresa es opcional |
+| GET | `/api/clientes/:id` | Consultar un cliente |
+| POST | `/api/clientes` | Crear un cliente |
+| PUT | `/api/clientes/:id` | Editar un cliente |
+
+Empresa, nombre y apellido son obligatorios. El formulario se encuentra en
+`/clientes` del frontend después de iniciar sesión. Por ahora se mantiene el
+modelo de acceso compartido del proyecto: el filtro por empresa no es un control
+de autorización entre empresas. La asociación de cuentas con empresas requiere
+definir esa relación, que no aparece en el DER.
+
+`npm run test:integration` verifica la API contra PostgreSQL usando las variables
+del `.env`. Crea un esquema temporal separado, prueba validaciones y persistencia
+tras reiniciar la API y elimina únicamente ese esquema al finalizar.
+
 ## Endpoints
 
 | Método | Ruta | Acción | Respuesta |
@@ -63,9 +89,9 @@ de datos (`SERIAL`). Cualquier ruta inexistente responde 404.
 api-eventos/
 ├── database/empresas.sql           script de la tabla y datos de prueba
 ├── src/
-│   ├── index.js                    crea el servidor y conecta todo
 │   ├── routes/empresas.routes.js   qué rutas existen
 │   ├── controllers/                qué hace cada ruta
 │   └── data/db.js                  conexión a la base de datos
+├── index.js                        crea el servidor y conecta todo
 └── .env                            no se versiona
 ```

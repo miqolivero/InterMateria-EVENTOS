@@ -27,6 +27,7 @@ function Navbar() {
 
         {usuario ? (
           <>
+            <Link className="navbar-link" to="/clientes">Clientes</Link>
             <Link
               className="navbar-link navbar-link-accion"
               to="/empresas/nueva"

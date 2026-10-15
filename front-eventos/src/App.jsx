@@ -6,6 +6,8 @@ import EmpresaForm from "./paginas/EmpresaForm";
 import Login from "./paginas/Login";
 import Registro from "./paginas/Registro";
 import NoEncontrada from "./paginas/NoEncontrada";
+import Clientes from "./paginas/Clientes";
+import ClienteForm from "./paginas/ClienteForm";
 import "./App.css";
 
 // Las rutas del front no son las rutas de la API: aca se define que pantalla
@@ -21,6 +23,9 @@ function App() {
           <Route path="/" element={<Empresas />} />
           <Route path="/login" element={<Login />} />
           <Route path="/registro" element={<Registro />} />
+          <Route path="/clientes" element={<RutaProtegida><Clientes /></RutaProtegida>} />
+          <Route path="/clientes/nuevo" element={<RutaProtegida><ClienteForm /></RutaProtegida>} />
+          <Route path="/clientes/:id/editar" element={<RutaProtegida><ClienteForm /></RutaProtegida>} />
 
           {/* Protegidas: sin token te manda al login */}
           <Route

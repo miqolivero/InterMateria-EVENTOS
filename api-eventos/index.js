@@ -3,6 +3,7 @@ import express from "express";
 import cors from "cors";
 import empresasRoutes from "./src/routes/empresas.routes.js";
 import authRoutes from "./src/routes/auth.routes.js";
+import clientesRoutes from "./src/routes/clientes.routes.js";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -13,12 +14,13 @@ app.use(express.json());
 
 app.use("/api/auth", authRoutes);
 app.use("/api/empresas", empresasRoutes);
+app.use("/api/clientes", clientesRoutes);
 
 // Ruta 404: siempre al final
 app.use((req, res) => {
   res.status(404).json({ mensaje: "Ruta no encontrada" });
 });
 
-app.listen(PORT, () => {
-  console.log(`Servidor escuchando en http://localhost:${PORT}`);
+const servidor = app.listen(PORT, () => {
+  console.log(`Servidor escuchando en http://localhost:${servidor.address().port}`);
 });
