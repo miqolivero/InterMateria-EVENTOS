@@ -3,10 +3,10 @@
   "version": "1.0.0",
   "description": "API del sistema de eventos - CRUD de empresas",
   "type": "module",
-  "main": "src/index.js",
+  "main": "index.js",
   "scripts": {
-    "start": "node src/index.js",
-    "dev": "node --watch src/index.js"
+    "start": "node index.js",
+    "dev": "node --watch index.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
