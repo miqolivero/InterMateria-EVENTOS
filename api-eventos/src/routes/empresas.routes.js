@@ -13,15 +13,16 @@ import {
 
 const router = Router();
 
-// Publicas: cualquiera puede ver
+// Publicas: el listado lo usa la pantalla de registro para elegir la empresa,
+// cuando todavia no hay token.
 router.get("/", obtenerEmpresas);
 router.get("/:id", obtenerEmpresaPorId);
 
-// Protegidas: hay que estar logueado
-router.post("/", verificarToken, crearEmpresa);
-router.put("/:id", verificarToken, editarEmpresa);
-
-// Solo admin. El orden importa: verificarToken crea req.usuario, verificarRol lo usa.
+// Alta, edicion y baja: solo admin. Dar de alta una empresa es crear un tenant
+// nuevo del sistema, no es algo que haga un usuario comun.
+// El orden importa: verificarToken crea req.usuario, verificarRol lo usa.
+router.post("/", verificarToken, verificarRol("admin"), crearEmpresa);
+router.put("/:id", verificarToken, verificarRol("admin"), editarEmpresa);
 router.delete("/:id", verificarToken, verificarRol("admin"), eliminarEmpresa);
 
 export default router;

@@ -44,16 +44,24 @@ avisa y no arranca, en vez de pasarse al 5174 y que el navegador bloquee todo.
 | `/` | Listado de empresas | Público |
 | `/login` | Iniciar sesión | Público |
 | `/registro` | Crear cuenta | Público |
-| `/empresas/nueva` | Alta de empresa | Con sesión |
-| `/empresas/:id/editar` | Edición | Con sesión |
+| `/empresas/nueva` | Alta de empresa | Con sesión (la API exige admin) |
+| `/empresas/:id/editar` | Edición | Con sesión (la API exige admin) |
 | `*` | 404 | Público |
 
 Las rutas con sesión están envueltas en `RutaProtegida`, que manda al login si
 no hay token. Eso es para la experiencia de usuario: **la seguridad real está en
 el backend**, porque cualquiera puede llamar a la API directamente.
 
+El sistema es multitenant, así que al crear una cuenta hay que **elegir la
+empresa**: `Registro.jsx` llena un `<select>` con `GET /api/empresas` (el listado
+es público justamente para eso) y manda el `id_empresa` elegido. Ese id queda en
+el token y es el que filtra todos los datos que ve el usuario.
+
 El botón de eliminar solo se muestra a los usuarios con rol `admin`, pero el que
-decide de verdad es el middleware de la API.
+decide de verdad es el middleware de la API. Crear y editar empresas también
+quedó restringido a admin en el backend: un usuario común que entre a esas
+pantallas va a recibir un 403 al guardar (ocultar esos botones es parte de la
+fase 2).
 
 ## Cómo viaja el token
 
