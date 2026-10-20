@@ -254,6 +254,42 @@ rutas piden token.
   aceptación falla, ese id de evento queda sin usar. Es normal que haya huecos
   en los ids.
 
+### Servicios del evento y tareas · `/api/servicios-evento`, `/api/tareas`
+
+| Método | Ruta | Acción | Respuesta |
+| --- | --- | --- | --- |
+| PATCH | `/api/servicios-evento/:id` | Estado del proveedor, proveedor, importes, observaciones (parcial) | 200 / 400 / 404 / 409 |
+| POST | `/api/servicios-evento/:id/generar-tareas` | Crear los 4 pasos de la secuencia | 201 / 400 / 404 / 409 |
+| GET | `/api/eventos/:id/tareas?estado_tarea=&vencidas=true` | Tareas del evento | 200 / 404 |
+| POST | `/api/eventos/:id/tareas` | Crear una tarea libre | 201 / 400 / 404 / 409 |
+| PUT | `/api/tareas/:id` | Editar descripción, responsable, fecha y observaciones | 200 / 400 / 404 / 409 |
+| PATCH | `/api/tareas/:id/estado` | Cambiar el estado (con la secuencia) | 200 / 400 / 404 / 409 |
+| DELETE | `/api/tareas/:id` | Borrar una tarea libre | 204 / 404 / 409 |
+| GET | `/api/tareas/mias?estado_tarea=` | Tareas del empleado del usuario logueado | 200 |
+
+- **Tarea ≠ proveedor (regla 6).** El estado del proveedor solo cambia con el
+  PATCH de servicios-evento; completar "Confirmar asistencia" no lo toca. Al
+  pasar a `confirmada` se guarda la fecha de confirmación.
+- **Secuencia (regla 5).** Las tareas de un servicio siguen el orden de
+  `tipos_tarea`. Un paso no pasa a `en_curso` ni a `completada` si el anterior no
+  está completado, y un paso completado no se reabre si el siguiente ya empezó
+  (409 con el nombre del paso que falta). El cambio de estado va en una
+  transacción que bloquea **todas** las tareas del servicio en el mismo orden,
+  para que dos cambios simultáneos no rompan la secuencia ni se traben entre sí.
+- **Fecha de finalización (regla 7).** Se guarda al completar y se limpia si la
+  tarea vuelve a otro estado.
+- **"Vencida" no se guarda (regla 1).** Se calcula en el SQL:
+  `fecha_prevista < CURRENT_DATE` y no completada.
+- **Generar tareas** crea los 4 pasos en un solo `INSERT ... SELECT` sobre
+  `tipos_tarea`, dentro de una transacción: o se crean los 4 o ninguno. La
+  descripción se arma sola (`"<tipo> · <servicio> (<proveedor>)"`).
+- El **responsable** tiene que ser un empleado activo de la empresa (regla 9).
+  Las tareas de la secuencia no se borran; las libres sí.
+- Con el evento cerrado, todo cambio en sus servicios o tareas responde 409.
+- **Mis tareas** busca el `id_empleado` del usuario en la tabla `usuarios`. Si
+  no tiene empleado vinculado, devuelve `[]`. Solo muestra eventos abiertos,
+  primero las vencidas.
+
 El contrato completo, con el JSON de cada respuesta y los mensajes de error
 exactos, está en `docs/API.md`.
 
@@ -309,7 +345,9 @@ api-eventos/
 │   │   ├── empleados.routes.js
 │   │   ├── solicitudes.routes.js   incluye /:id/presupuestos
 │   │   ├── presupuestos.routes.js  incluye /:id/aceptar
-│   │   └── eventos.routes.js
+│   │   ├── eventos.routes.js       incluye /:id/servicios y /:id/tareas
+│   │   ├── serviciosEvento.routes.js
+│   │   └── tareas.routes.js        incluye /mias
 │   ├── controllers/                un controlador por recurso
 │   │   ├── auth.controller.js      registrar, login, perfil
 │   │   ├── empresas.controller.js
@@ -320,7 +358,9 @@ api-eventos/
 │   │   ├── empleados.controller.js
 │   │   ├── solicitudes.controller.js
 │   │   ├── presupuestos.controller.js
-│   │   └── eventos.controller.js   incluye aceptar (regla 4)
+│   │   ├── eventos.controller.js   incluye aceptar (regla 4)
+│   │   ├── serviciosEvento.controller.js  estado del proveedor y generar tareas
+│   │   └── tareas.controller.js    secuencia, vencida y mis tareas
 │   ├── middlewares/
 │   │   └── auth.middleware.js      verificarToken, verificarRol
 │   ├── utils/                      lo que comparten los controladores

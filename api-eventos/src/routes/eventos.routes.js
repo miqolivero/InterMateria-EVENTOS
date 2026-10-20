@@ -7,6 +7,10 @@ import {
   iniciarPreparacion,
   obtenerServiciosDelEvento
 } from "../controllers/eventos.controller.js";
+import {
+  obtenerTareasDelEvento,
+  crearTarea
+} from "../controllers/tareas.controller.js";
 
 const router = Router();
 
@@ -21,7 +25,12 @@ router.get("/:id", obtenerEventoPorId);
 router.put("/:id", editarEvento);
 router.patch("/:id/iniciar-preparacion", iniciarPreparacion);
 
-// Lo acordado con cada proveedor (solo lectura en esta fase)
+// Lo acordado con cada proveedor (se editan en /api/servicios-evento)
 router.get("/:id/servicios", obtenerServiciosDelEvento);
+
+// Fase 6: tareas del evento (las de la secuencia se generan en
+// POST /api/servicios-evento/:id/generar-tareas)
+router.get("/:id/tareas", obtenerTareasDelEvento);
+router.post("/:id/tareas", crearTarea);
 
 export default router;

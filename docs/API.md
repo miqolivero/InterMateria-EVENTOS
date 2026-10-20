@@ -832,7 +832,7 @@ Objeto **Tarea**:
 
 Con el evento cerrado (`realizado` o `cancelado`), todos los POST, PUT, PATCH y
 DELETE de esta fase responden 409 ·
-`"El evento está cerrado y no se puede modificar"`.
+`"El evento esta cerrado y no se puede modificar"`.
 
 ## Servicios del evento
 
@@ -851,14 +851,18 @@ Actualización parcial: se mandan solo los campos que cambian.
 ```
 
 - Si `estado_proveedor` pasa a `confirmada`, se guarda
-  `fecha_confirmacion_proveedor` = hoy. Si vuelve a `solicitada`, ese campo se limpia.
+  `fecha_confirmacion_proveedor` = hoy (si ya estaba confirmada, se conserva la
+  fecha original). Si vuelve a `solicitada`, ese campo se limpia.
+- `"id_proveedor": null` deja el servicio sin proveedor. Un proveedor inactivo
+  responde lo mismo que uno que no ofrece el servicio.
+- Un body vacío no es un error: responde 200 con el servicio sin cambios.
 - **No modifica ninguna tarea** (regla 6).
 
 Respuesta 200: **ServicioEvento**.
 
 Errores:
 
-- 400 · `"Estado de proveedor inválido"`
+- 400 · `"Estado de proveedor invalido"`
 - 400 · `"El proveedor no ofrece ese servicio"`
 - 400 · `"Los importes no pueden ser negativos"`
 
@@ -875,7 +879,8 @@ Body:
 }
 ```
 
-- `fechas` tiene 4 fechas, una por paso, en orden y sin retroceder.
+- `fechas` tiene 4 fechas, una por paso, en orden y sin retroceder (dos pasos
+  pueden caer el mismo día).
 - La `descripcion` de cada tarea se arma sola: `"<tipo de tarea> · <servicio> (<proveedor>)"`.
 
 Respuesta 201: `[Tarea]`, las 4 tareas creadas.
@@ -917,7 +922,7 @@ Respuesta 201: **Tarea**.
 
 Errores:
 
-- 400 · `"La descripción, el responsable y la fecha prevista son obligatorios"`
+- 400 · `"La descripcion, el responsable y la fecha prevista son obligatorios"`
 - 400 · `"El responsable no es un empleado activo de la empresa"`
 - 400 · `"El servicio no pertenece a este evento"`
 
@@ -941,16 +946,20 @@ Body:
   `en_curso` o `completada` si la de orden N−1 del mismo servicio está `completada`.
 - Al pasar a `completada` se guarda `fecha_finalizacion` = hoy. Si la tarea
   vuelve a otro estado, se limpia.
-- Una tarea no puede volver a `pendiente` si la siguiente de la secuencia ya
-  está `en_curso` o `completada`.
+- Una tarea completada no puede volver a `pendiente` **ni a `en_curso`** si la
+  siguiente de la secuencia ya está `en_curso` o `completada`: si no, quedaría
+  un paso en curso con el anterior sin terminar.
+- Si una tarea ya completada se vuelve a marcar `completada`, conserva su
+  `fecha_finalizacion` original.
+- Las tareas libres pasan a cualquier estado: no tienen secuencia.
 
 Respuesta 200: **Tarea**.
 
 Errores:
 
-- 400 · `"Estado de tarea inválido"`
+- 400 · `"Estado de tarea invalido"`
 - 409 · `"Primero hay que completar: <nombre del paso anterior>"`
-- 409 · `"No se puede reabrir: el paso siguiente ya empezó"`
+- 409 · `"No se puede reabrir: el paso siguiente ya empezo"`
 
 ### DELETE /tareas/:id
 
@@ -961,7 +970,8 @@ Solo para tareas libres (sin `id_tipo_tarea`). Respuesta 204.
 ### GET /tareas/mias
 
 Tareas del empleado vinculado al usuario logueado (`id_empleado` del login), de
-eventos abiertos. Ordenadas: primero las vencidas, después por `fecha_prevista`.
+eventos abiertos. El `id_empleado` se lee de la tabla `usuarios` en cada pedido
+(no viaja en el token). Ordenadas: primero las vencidas, después por `fecha_prevista`.
 Filtro: `?estado_tarea=`.
 
 Respuesta 200: `[Tarea]`, con tres campos más:
@@ -1113,6 +1123,7 @@ Respuesta 200: **Evento (detalle)**.
 | 2026-10-20 | 3 | Mensajes de error sin tildes (`"El cliente no existe o esta inactivo"`, `"El tipo de evento no existe o esta inactivo"`, `"Estado invalido"`), como pide la convención. Se aclara que una fecha con formato inválido responde el 400 de obligatorios y que los filtros inválidos del listado se ignoran | ✘ |
 | 2026-10-20 | 4 | Mensajes sin tildes. Errores nuevos: 400 de `validez_dias`, 409 `"Solo se puede crear una nueva version desde la ultima version"` y 409 de solicitud cerrada al presentar o crear una versión. Al presentar, `fecha_emision` pasa a ser hoy. La nueva versión copia `validez_dias` y `observaciones`. Un proveedor inactivo responde "no ofrece ese servicio" | ✘ |
 | 2026-10-20 | 5 | Mensajes sin tildes (`"El evento esta cerrado..."`, `"...iniciar la preparacion..."`). Aceptar responde 409 `"La solicitud esta <estado> y no admite presupuestos"` si la solicitud está cerrada. Se aclara que el coordinador es opcional, que la validez vencida no impide aceptar y que el PUT reemplaza el objeto completo | ✘ |
+| 2026-10-20 | 6 | Mensajes sin tildes. Reabrir un paso completado se bloquea también hacia `en_curso` (no solo hacia `pendiente`) si el siguiente ya empezó. Se aclara: fecha de confirmación y de finalización se conservan si se repite el estado, `id_proveedor: null` desasigna, body vacío en el PATCH responde 200, dos pasos pueden tener la misma fecha | ✘ |
 
 ### Pendientes del back sobre la Fase 1 ya implementada
 

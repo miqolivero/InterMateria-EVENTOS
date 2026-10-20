@@ -33,3 +33,8 @@ export const esFechaValida = (valor) => {
   const fecha = new Date(`${valor}T00:00:00Z`);
   return !isNaN(fecha) && fecha.toISOString().slice(0, 10) === valor;
 };
+
+// Un campo opcional que "no vino": undefined, null o string vacio. Se usa en
+// vez de !valor porque 0 y false son valores validos.
+export const esVacio = (valor) =>
+  valor === undefined || valor === null || valor === "";

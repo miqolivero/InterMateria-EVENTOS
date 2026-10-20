@@ -7,6 +7,14 @@ import { esIdValido, esFechaValida } from "../utils/validaciones.js";
 // La tabla eventos SI tiene id_empresa (se guarda la del token al crearlo),
 // asi que las consultas filtran directo por e.id_empresa.
 
+// Un evento "abierto" todavia se puede editar. Realizado o cancelado ya esta
+// cerrado (regla 8): solo se le cargan observaciones y feedback (fase 8).
+// Se exportan porque los servicios y las tareas del evento aplican la misma
+// regla: con el evento cerrado, nada se modifica.
+export const ESTADOS_EVENTO_ABIERTO = ["confirmado", "en_preparacion"];
+export const MENSAJE_EVENTO_CERRADO = "El evento esta cerrado y no se puede modificar";
+const ESTADOS_ABIERTOS = ESTADOS_EVENTO_ABIERTO;
+
 const MENSAJES = {
   noEncontrado: "Evento no encontrado",
   presupuestoNoEncontrado: "Presupuesto no encontrado",
@@ -15,7 +23,7 @@ const MENSAJES = {
   coordinadorInvalido: "El coordinador no es un empleado activo de la empresa",
   noAceptable: "Solo se puede aceptar un presupuesto presentado",
   yaTieneEvento: "La solicitud ya tiene un evento",
-  cerrado: "El evento esta cerrado y no se puede modificar",
+  cerrado: MENSAJE_EVENTO_CERRADO,
   noIniciable: "Solo se puede iniciar la preparacion de un evento confirmado"
 };
 
@@ -23,10 +31,6 @@ const solicitudCerrada = (estado) =>
   `La solicitud esta ${estado} y no admite presupuestos`;
 
 const ESTADOS_SOLICITUD_ABIERTA = ["pendiente", "presupuestada"];
-
-// Un evento "abierto" todavia se puede editar. Realizado o cancelado ya esta
-// cerrado (regla 8): solo se le cargan observaciones y feedback (fase 8).
-const ESTADOS_ABIERTOS = ["confirmado", "en_preparacion"];
 
 const vacio = (valor) => valor === undefined || valor === null || valor === "";
 
