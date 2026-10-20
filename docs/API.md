@@ -715,22 +715,30 @@ Body:
     `importe_acordado_cliente`, y también se copian `descripcion` y
     `cantidad`. El estado queda `solicitada`.
 - El evento se guarda con el `id_empresa` del token.
+- `id_empleado_coordinador` es opcional: si no viene (o viene `null`), el
+  evento queda sin coordinador.
+- La `validez_dias` del presupuesto es informativa: un presupuesto vencido se
+  puede aceptar igual.
 
 Respuesta 201: **Evento (detalle)**.
 
 Errores:
 
-- 400 · `"La fecha del evento es obligatoria"`
+- 400 · `"La fecha del evento es obligatoria"` (también si no tiene formato
+  `YYYY-MM-DD` o no existe)
 - 400 · `"La fecha del evento no puede ser anterior a hoy"`
 - 400 · `"El coordinador no es un empleado activo de la empresa"`
 - 409 · `"Solo se puede aceptar un presupuesto presentado"`
 - 409 · `"La solicitud ya tiene un evento"`
+- 409 · `"La solicitud esta <estado> y no admite presupuestos"` (si la
+  solicitud se canceló o se rechazó con el presupuesto ya presentado)
 
 ### GET /eventos
 
 Filtros: `?estado=en_preparacion`, `?desde=&hasta=` (sobre
 `fecha_evento_confirmada`), `?id_coordinador=1` y `?buscar=texto` (nombre del
-cliente). Ordenado por fecha ascendente.
+cliente). Ordenado por fecha ascendente. Un filtro con formato inválido se
+ignora, igual que en solicitudes.
 
 Respuesta 200: `[Evento (listado)]`.
 
@@ -743,14 +751,18 @@ Respuesta 200: **Evento (detalle)**.
 Body: `fecha_evento_confirmada`*, `sede_acordada`, `condiciones_acordadas` e
 `id_empleado_coordinador`. Respuesta 200: **Evento (detalle)**.
 
+Se manda el objeto completo, como en los catálogos: un campo que no viene queda
+en `null` (por ejemplo, sin `id_empleado_coordinador` el evento queda sin
+coordinador).
+
 - 400 · los mismos errores de validación que en aceptar
-- 409 · `"El evento está cerrado y no se puede modificar"`
+- 409 · `"El evento esta cerrado y no se puede modificar"`
 
 ### PATCH /eventos/:id/iniciar-preparacion
 
 Pasa de `confirmado` a `en_preparacion`. Sin body. Respuesta 200: **Evento (detalle)**.
 
-- 409 · `"Solo se puede iniciar la preparación de un evento confirmado"`
+- 409 · `"Solo se puede iniciar la preparacion de un evento confirmado"`
 
 ### GET /eventos/:id/servicios
 
@@ -1100,6 +1112,7 @@ Respuesta 200: **Evento (detalle)**.
 | 2026-10-20 | 1 a 8 | Versión inicial completa, alineada con el `schema.sql` de la Fase 1 | ✔ |
 | 2026-10-20 | 3 | Mensajes de error sin tildes (`"El cliente no existe o esta inactivo"`, `"El tipo de evento no existe o esta inactivo"`, `"Estado invalido"`), como pide la convención. Se aclara que una fecha con formato inválido responde el 400 de obligatorios y que los filtros inválidos del listado se ignoran | ✘ |
 | 2026-10-20 | 4 | Mensajes sin tildes. Errores nuevos: 400 de `validez_dias`, 409 `"Solo se puede crear una nueva version desde la ultima version"` y 409 de solicitud cerrada al presentar o crear una versión. Al presentar, `fecha_emision` pasa a ser hoy. La nueva versión copia `validez_dias` y `observaciones`. Un proveedor inactivo responde "no ofrece ese servicio" | ✘ |
+| 2026-10-20 | 5 | Mensajes sin tildes (`"El evento esta cerrado..."`, `"...iniciar la preparacion..."`). Aceptar responde 409 `"La solicitud esta <estado> y no admite presupuestos"` si la solicitud está cerrada. Se aclara que el coordinador es opcional, que la validez vencida no impide aceptar y que el PUT reemplaza el objeto completo | ✘ |
 
 ### Pendientes del back sobre la Fase 1 ya implementada
 

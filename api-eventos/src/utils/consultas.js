@@ -76,3 +76,21 @@ export const existeEnEmpresa = async (
 
   return resultado.rows.length > 0;
 };
+
+// Verifica que un empleado trabaje HOY en la empresa: el vinculo
+// (empleados_x_empresa) tiene que estar activo, y el empleado tambien.
+//
+// No alcanza con existeEnEmpresa porque los empleados no tienen id_empresa:
+// la relacion es N:M con historial. Se usa para el coordinador de un evento y
+// para el responsable de una tarea (regla 9 de CLAUDE.md).
+export const esEmpleadoActivo = async (ejecutor, idEmpleado, idEmpresa) => {
+  const resultado = await ejecutor.query(
+    `SELECT 1 FROM empleados_x_empresa exe
+     JOIN empleados e ON e.id_empleado = exe.id_empleado
+     WHERE exe.id_empleado = $1 AND exe.id_empresa = $2
+       AND exe.activo = TRUE AND e.activo = TRUE`,
+    [idEmpleado, idEmpresa]
+  );
+
+  return resultado.rows.length > 0;
+};

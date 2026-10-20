@@ -10,6 +10,7 @@ import {
   crearNuevaVersion,
   rechazarPresupuesto
 } from "../controllers/presupuestos.controller.js";
+import { aceptarPresupuesto } from "../controllers/eventos.controller.js";
 
 const router = Router();
 
@@ -32,5 +33,9 @@ router.delete("/:id/detalle/:idDetalle", eliminarRenglon);
 router.patch("/:id/presentar", presentarPresupuesto);
 router.post("/:id/nueva-version", crearNuevaVersion);
 router.patch("/:id/rechazar", rechazarPresupuesto);
+
+// Fase 5: aceptar crea el evento (regla 4). La logica vive en el controlador
+// de eventos porque lo que se crea y se devuelve es un Evento.
+router.post("/:id/aceptar", aceptarPresupuesto);
 
 export default router;

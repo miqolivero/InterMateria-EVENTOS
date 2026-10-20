@@ -223,6 +223,37 @@ versiones), así el front siempre recibe los totales recalculados.
   versión) van en una transacción con la fila bloqueada (`SELECT ... FOR
   UPDATE`), para que dos pedidos simultáneos no dejen datos inconsistentes.
 
+### Eventos · `/api/eventos`
+
+Un evento **no se crea directamente**: nace al aceptar un presupuesto. Todas las
+rutas piden token.
+
+| Método | Ruta | Acción | Respuesta |
+| --- | --- | --- | --- |
+| POST | `/api/presupuestos/:id/aceptar` | Aceptar el presupuesto y crear el evento | 201 / 400 / 404 / 409 |
+| GET | `/?estado=&desde=&hasta=&id_coordinador=&buscar=` | Listar | 200 · array |
+| GET | `/:id` | Detalle (coordinador, cliente, solicitud y presupuesto aceptado) | 200 / 404 |
+| PUT | `/:id` | Editar fecha, sede, condiciones y coordinador | 200 / 400 / 404 / 409 |
+| PATCH | `/:id/iniciar-preparacion` | De confirmado a en preparación | 200 / 404 / 409 |
+| GET | `/:id/servicios` | Lo acordado con cada proveedor | 200 / 404 |
+
+- **Aceptar aplica la regla 4 en una sola transacción:** el presupuesto pasa a
+  `aceptado`, las otras versiones abiertas a `reemplazado`, la solicitud a
+  `aceptada`, se crea el evento en `confirmado` y cada renglón del detalle se
+  copia a `servicios_x_evento` con estado `solicitada`. Si cualquier paso falla,
+  el `ROLLBACK` deshace todo (se probó forzando un error con un trigger).
+- **Una solicitud, un evento:** además del chequeo en el código, el `UNIQUE
+  (id_solicitud)` de `eventos` lo garantiza en la base.
+- El **coordinador** es opcional, pero si viene tiene que trabajar hoy en la
+  empresa: vínculo activo en `empleados_x_empresa` y empleado activo (regla 9).
+- Con el evento `realizado` o `cancelado` no se edita (409). `editable` lo
+  indica al front.
+- En los servicios del evento, `tareas_generadas` y `paso_actual` (el orden de la
+  primera tarea de la secuencia sin completar) se calculan en el SQL.
+- Las secuencias de PostgreSQL no vuelven atrás con un `ROLLBACK`: si una
+  aceptación falla, ese id de evento queda sin usar. Es normal que haya huecos
+  en los ids.
+
 El contrato completo, con el JSON de cada respuesta y los mensajes de error
 exactos, está en `docs/API.md`.
 
@@ -277,7 +308,8 @@ api-eventos/
 │   │   ├── proveedores.routes.js   incluye /:id/servicios
 │   │   ├── empleados.routes.js
 │   │   ├── solicitudes.routes.js   incluye /:id/presupuestos
-│   │   └── presupuestos.routes.js
+│   │   ├── presupuestos.routes.js  incluye /:id/aceptar
+│   │   └── eventos.routes.js
 │   ├── controllers/                un controlador por recurso
 │   │   ├── auth.controller.js      registrar, login, perfil
 │   │   ├── empresas.controller.js
@@ -287,12 +319,13 @@ api-eventos/
 │   │   ├── proveedores.controller.js
 │   │   ├── empleados.controller.js
 │   │   ├── solicitudes.controller.js
-│   │   └── presupuestos.controller.js
+│   │   ├── presupuestos.controller.js
+│   │   └── eventos.controller.js   incluye aceptar (regla 4)
 │   ├── middlewares/
 │   │   └── auth.middleware.js      verificarToken, verificarRol
 │   ├── utils/                      lo que comparten los controladores
 │   │   ├── errores.js              traduce los errores de pg a HTTP
-│   │   ├── consultas.js            filtros de listado y chequeo por empresa
+│   │   ├── consultas.js            filtros, chequeo por empresa y empleado activo
 │   │   └── validaciones.js         formatos de ids, fechas, importes y cantidades
 │   └── data/
 │       └── db.js                   pool de pg y parsers de fecha y monto
