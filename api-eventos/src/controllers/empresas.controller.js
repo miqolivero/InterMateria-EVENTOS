@@ -1,4 +1,5 @@
 import pool from "../data/db.js";
+import { responderError } from "../utils/errores.js";
 
 // GET /api/empresas
 export const obtenerEmpresas = async (req, res) => {
@@ -126,6 +127,13 @@ export const eliminarEmpresa = async (req, res) => {
 
     res.status(204).send();
   } catch (error) {
-    res.status(500).json({ mensaje: "Error al eliminar la empresa" });
+    // Una empresa con usuarios, clientes o eventos no se puede borrar: las FK
+    // lo impiden (23503). Antes eso salia como 500, que hacia parecer un error
+    // nuestro; es un 409, porque el pedido es valido pero choca con el estado
+    // de la base.
+    responderError(res, error, {
+      asociado:
+        "La empresa tiene datos asociados. Desactivala en lugar de eliminarla"
+    });
   }
 };

@@ -101,11 +101,13 @@ export const login = async (req, res) => {
       { expiresIn: process.env.JWT_EXPIRES_IN }
     );
 
-    // 4. Devolver el token y los datos publicos
+    // 4. Devolver el token y los datos publicos.
+    // El campo se llama id_usuario, igual que la columna y que lo que devuelve
+    // /auth/perfil: el front lee el mismo nombre en los dos lados.
     res.json({
       token,
       usuario: {
-        id: usuario.id_usuario,
+        id_usuario: usuario.id_usuario,
         nombre: usuario.nombre,
         email: usuario.email,
         rol: usuario.rol,

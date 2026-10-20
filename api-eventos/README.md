@@ -87,10 +87,13 @@ Servidor en `http://localhost:3000`.
 tiene que existir y estar activa; si no, responde 400. El email es único: si se
 repite, también 400. Todo usuario nuevo nace con `rol: "usuario"`.
 
-`POST /login` devuelve `{ token, usuario }`. El payload del token es
-`{ id, email, rol, id_empresa }`: de ahí sale el `id_empresa` con el que los
-controladores filtran los datos, **nunca del body ni de la URL**. Ese token se
-manda en las rutas protegidas con el header `Authorization: Bearer <token>`.
+`POST /login` devuelve `{ token, usuario }`, donde `usuario` trae `id_usuario`,
+`nombre`, `email`, `rol`, `id_empresa`, `nombre_empresa` e `id_empleado`.
+
+El payload del token es `{ id, email, rol, id_empresa }`: de ahí sale el
+`id_empresa` con el que los controladores filtran los datos, **nunca del body ni
+de la URL**. Ese token se manda en las rutas protegidas con el header
+`Authorization: Bearer <token>`.
 
 ### Empresas · `/api/empresas`
 
@@ -108,8 +111,52 @@ borrar una empresa, en cambio, es crear o tocar un tenant del sistema: eso queda
 **solo para admin**.
 
 `nombre` y `cuit` son obligatorios al crear y al editar. El `id` lo genera la
-base (`SERIAL`). El `cuit` es único: si se repite, la respuesta es 400.
-Cualquier ruta inexistente responde 404.
+base (`SERIAL`). El `cuit` es único: si se repite, la respuesta es 400. Borrar
+una empresa que ya tiene usuarios, clientes o eventos responde **409**: hay que
+desactivarla, no eliminarla. Cualquier ruta inexistente responde 404.
+
+### Catálogos · clientes, tipos de evento, servicios, proveedores y empleados
+
+Los cinco recursos siguen **el mismo patrón**, y todos piden token:
+
+| Método | Ruta | Acción | Respuesta |
+| --- | --- | --- | --- |
+| GET | `/<recurso>?activo=true\|false&buscar=texto` | Listar | 200 · array |
+| GET | `/<recurso>/:id` | Obtener uno | 200 / 404 |
+| POST | `/<recurso>` | Crear | 201 / 400 |
+| PUT | `/<recurso>/:id` | Editar (objeto completo) | 200 / 400 / 404 |
+| PATCH | `/<recurso>/:id/activo` | Activar o desactivar | 200 / 400 / 404 |
+
+| Recurso | Ruta | Obligatorios | `?buscar` busca en |
+| --- | --- | --- | --- |
+| Clientes | `/api/clientes` | `nombre`, `apellido` | nombre, apellido, dni_cuit, email |
+| Tipos de evento | `/api/tipos-eventos` | `nombre` | nombre |
+| Servicios | `/api/servicios` | `nombre` | nombre, descripción |
+| Proveedores | `/api/proveedores` | `razon_social` | razón social, cuit, email |
+| Empleados | `/api/empleados` | `legajo`, `nombre`, `apellido` | nombre, apellido, legajo |
+
+**No hay `DELETE`**: la baja es lógica, porque los presupuestos y los eventos ya
+cerrados siguen apuntando a estos registros. Sin `?activo` el listado devuelve
+todos; con `?activo=false` solo los dados de baja.
+
+Dos recursos tienen particularidades:
+
+- **Proveedores** devuelven además `servicios: [{ id_servicio, nombre }]`, que es
+  de solo lectura en el POST y el PUT. Se modifica con
+  `GET`/`PUT /api/proveedores/:id/servicios` (el PUT recibe
+  `{ ids_servicios: [1, 4] }` y reemplaza la lista completa en una transacción).
+  El filtro `?id_servicio=3` devuelve solo los proveedores que ofrecen ese
+  servicio: lo usa el `Select` de proveedor del presupuesto.
+- **Empleados** se listan por su vínculo con la empresa
+  (`empleados_x_empresa`), así que el objeto mezcla campos de las dos tablas:
+  `legajo`, `nombre`, `apellido`, `rol`, `email` y `telefono` son del empleado, y
+  `cargo`, `fecha_inicio`, `fecha_fin` y `activo` son del vínculo. El `PATCH
+  /:id/activo` con `false` cierra `fecha_fin` en la fecha de hoy; con `true` la
+  vuelve a dejar en `null`. El `legajo` es único **en todo el sistema**, no por
+  empresa.
+
+El contrato completo, con el JSON de cada respuesta y los mensajes de error
+exactos, está en `docs/API.md`.
 
 ### Códigos de autenticación
 
@@ -152,19 +199,48 @@ api-eventos/
 │   ├── schema.sql                  las 16 tablas del modelo (DDL)
 │   └── seed.sql                    datos de prueba
 ├── src/
-│   ├── index.js                    crea el servidor y conecta todo
-│   ├── routes/
-│   │   ├── empresas.routes.js      rutas de empresas
-│   │   └── auth.routes.js          rutas de autenticación
-│   ├── controllers/
+│   ├── index.js                    crea el servidor y monta las rutas
+│   ├── routes/                     una ruta por recurso
+│   │   ├── auth.routes.js
+│   │   ├── empresas.routes.js
+│   │   ├── clientes.routes.js
+│   │   ├── tiposEventos.routes.js
+│   │   ├── servicios.routes.js
+│   │   ├── proveedores.routes.js   incluye /:id/servicios
+│   │   └── empleados.routes.js
+│   ├── controllers/                un controlador por recurso
+│   │   ├── auth.controller.js      registrar, login, perfil
 │   │   ├── empresas.controller.js
-│   │   └── auth.controller.js      registrar, login, perfil
+│   │   ├── clientes.controller.js
+│   │   ├── tiposEventos.controller.js
+│   │   ├── servicios.controller.js
+│   │   ├── proveedores.controller.js
+│   │   └── empleados.controller.js
 │   ├── middlewares/
 │   │   └── auth.middleware.js      verificarToken, verificarRol
+│   ├── utils/                      lo que comparten los controladores
+│   │   ├── errores.js              traduce los errores de pg a HTTP
+│   │   └── consultas.js            filtros de listado y chequeo por empresa
 │   └── data/
-│       └── db.js                   conexión a PostgreSQL (pool de pg)
+│       └── db.js                   pool de pg y parsers de fecha y monto
 └── .env                            no se versiona
 ```
+
+Cada recurso es un par `routes` + `controller` con los mismos cinco endpoints,
+así que para agregar uno nuevo alcanza con copiar el patrón de `clientes` y
+montarlo en `index.js`.
+
+Lo que se repetía en los cinco recursos vive en `src/utils/`:
+
+- **`errores.js`** traduce los códigos de PostgreSQL al HTTP que corresponde
+  (`23505` duplicado → 400, `23503` datos asociados → 409, resto → 500). Sin
+  esto el mismo `try/catch` estaría escrito 25 veces.
+- **`consultas.js`** arma el `WHERE` de `?activo` y `?buscar` siempre
+  parametrizado, y verifica que un id de otra tabla sea de la misma empresa.
+
+`db.js` además configura dos parsers de `pg`: las fechas (`DATE`) se devuelven
+como texto para que no se corran de zona horaria, y los montos (`NUMERIC`) como
+número en vez de string, que es lo que pide `docs/API.md`.
 
 ## Modelo de datos
 
