@@ -58,8 +58,10 @@ Somos dos personas: una a cargo del **backend** y otra del **frontend**.
   rompe las pantallas.
 - **Archivos compartidos** (`CLAUDE.md` de la raíz, `ROADMAP.md`, el DER): se
   cambian solo si están de acuerdo los dos.
-- **Ramas**: `back/fase-N` y `front/fase-N`. Se mergea a `main` con Pull
-  Request, y el otro integrante lo revisa.
+- **Ramas**: una por persona, `backend` y `frontend`, donde se suben todos los
+  avances. Al terminar cada fase (los dos lados probados juntos) se mergea a
+  `main` con Pull Request, y el otro integrante lo revisa. Lo del otro se trae
+  desde `main` (`git merge origin/main`).
 
 ## Modelo de datos
 

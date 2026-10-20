@@ -50,15 +50,27 @@ export const construirFiltros = (
 // empresa con registros de otra.
 //
 // ejecutor es el pool o un client de transaccion, asi sirve en los dos casos.
+//
+// soloActivos: para dar de alta algo nuevo (una solicitud, por ejemplo) no
+// alcanza con que el registro sea de la empresa, tambien tiene que estar
+// activo. Un cliente dado de baja conserva su historial, pero no recibe
+// pedidos nuevos.
+//
+// tabla y columnaId los escribe siempre el controlador, nunca vienen del
+// request: por eso se pueden interpolar sin riesgo de inyeccion.
 export const existeEnEmpresa = async (
   ejecutor,
   tabla,
   columnaId,
   id,
-  idEmpresa
+  idEmpresa,
+  { soloActivos = false } = {}
 ) => {
+  const filtroActivo = soloActivos ? "AND activo = TRUE" : "";
+
   const resultado = await ejecutor.query(
-    `SELECT 1 FROM ${tabla} WHERE ${columnaId} = $1 AND id_empresa = $2`,
+    `SELECT 1 FROM ${tabla}
+     WHERE ${columnaId} = $1 AND id_empresa = $2 ${filtroActivo}`,
     [id, idEmpresa]
   );
 

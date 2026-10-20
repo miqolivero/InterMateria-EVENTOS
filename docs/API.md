@@ -385,6 +385,9 @@ Filtros (todos opcionales): `?estado=pendiente`, `?id_cliente=1`,
 
 Ordenado por `fecha_evento_prevista` ascendente. Respuesta 200: `[Solicitud]`.
 
+Un filtro con formato inválido (`?desde=hola`, `?id_cliente=abc`) se ignora:
+no da error.
+
 ### GET /solicitudes/:id
 
 Respuesta 200: la **Solicitud** con dos campos más, `cliente` y `presupuestos`:
@@ -434,8 +437,9 @@ Respuesta 201: la **Solicitud** completa (formato del listado).
 Errores:
 
 - 400 · `"El cliente, el tipo de evento, la fecha y la cantidad de asistentes son obligatorios"`
-- 400 · `"El cliente no existe o está inactivo"`
-- 400 · `"El tipo de evento no existe o está inactivo"`
+  (también si la fecha no tiene formato `YYYY-MM-DD` o no existe, como `2026-02-31`)
+- 400 · `"El cliente no existe o esta inactivo"`
+- 400 · `"El tipo de evento no existe o esta inactivo"`
 - 400 · `"La cantidad de asistentes tiene que ser mayor a 0"`
 - 400 · `"La fecha del evento no puede ser anterior a hoy"`
 
@@ -458,7 +462,7 @@ Solo acepta `cancelada` o `rechazada`, y solo desde `pendiente` o
 
 Respuesta 200: **Solicitud**.
 
-- 400 · `"Estado inválido"`
+- 400 · `"Estado invalido"`
 - 409 · `"No se puede cambiar el estado de una solicitud <estado actual>"`
 
 ---
@@ -1075,6 +1079,7 @@ Respuesta 200: **Evento (detalle)**.
 | Fecha | Fase | Cambio | Avisado al front |
 | --- | --- | --- | --- |
 | 2026-10-20 | 1 a 8 | Versión inicial completa, alineada con el `schema.sql` de la Fase 1 | ✔ |
+| 2026-10-20 | 3 | Mensajes de error sin tildes (`"El cliente no existe o esta inactivo"`, `"El tipo de evento no existe o esta inactivo"`, `"Estado invalido"`), como pide la convención. Se aclara que una fecha con formato inválido responde el 400 de obligatorios y que los filtros inválidos del listado se ignoran | ✘ |
 
 ### Pendientes del back sobre la Fase 1 ya implementada
 

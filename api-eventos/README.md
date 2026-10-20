@@ -155,6 +155,35 @@ Dos recursos tienen particularidades:
   vuelve a dejar en `null`. El `legajo` es único **en todo el sistema**, no por
   empresa.
 
+### Solicitudes · `/api/solicitudes`
+
+El pedido inicial del cliente, antes de cualquier presupuesto. Todas las rutas
+piden token.
+
+| Método | Ruta | Acción | Respuesta |
+| --- | --- | --- | --- |
+| GET | `/?estado=&id_cliente=&desde=&hasta=&buscar=` | Listar | 200 · array |
+| GET | `/:id` | Obtener una, con `cliente` y `presupuestos` | 200 / 404 |
+| POST | `/` | Crear | 201 / 400 |
+| PUT | `/:id` | Editar | 200 / 400 / 404 / 409 |
+| PATCH | `/:id/estado` | Cancelar o rechazar: `{ "estado": "cancelada" }` | 200 / 400 / 404 / 409 |
+
+- Cada solicitud trae `nombre_cliente`, `nombre_tipo_evento` e `id_evento`
+  (`null` mientras no haya evento). El listado se ordena por
+  `fecha_evento_prevista`. `desde` y `hasta` filtran sobre esa fecha y `buscar`
+  busca sobre el nombre completo del cliente.
+- Obligatorios: `id_cliente`, `id_tipo_evento`, `fecha_evento_prevista` y
+  `cantidad_asistentes`. El cliente y el tipo de evento tienen que ser **de la
+  empresa del token y estar activos**, la cantidad tiene que ser un entero mayor
+  a 0 y la fecha no puede ser anterior a hoy (se compara con `CURRENT_DATE` en
+  la base).
+- Nace con `fecha_solicitud` = hoy y `estado` = `pendiente`. El estado nunca se
+  edita por el PUT.
+- Solo se edita, cancela o rechaza mientras está `pendiente` o `presupuestada`;
+  si no, responde **409**. Pasar a `presupuestada` o `aceptada` lo hacen los
+  presupuestos (fases 4 y 5).
+- No hay `DELETE`: una solicitud que no sigue se cancela o se rechaza.
+
 El contrato completo, con el JSON de cada respuesta y los mensajes de error
 exactos, está en `docs/API.md`.
 
@@ -207,7 +236,8 @@ api-eventos/
 │   │   ├── tiposEventos.routes.js
 │   │   ├── servicios.routes.js
 │   │   ├── proveedores.routes.js   incluye /:id/servicios
-│   │   └── empleados.routes.js
+│   │   ├── empleados.routes.js
+│   │   └── solicitudes.routes.js
 │   ├── controllers/                un controlador por recurso
 │   │   ├── auth.controller.js      registrar, login, perfil
 │   │   ├── empresas.controller.js
@@ -215,7 +245,8 @@ api-eventos/
 │   │   ├── tiposEventos.controller.js
 │   │   ├── servicios.controller.js
 │   │   ├── proveedores.controller.js
-│   │   └── empleados.controller.js
+│   │   ├── empleados.controller.js
+│   │   └── solicitudes.controller.js
 │   ├── middlewares/
 │   │   └── auth.middleware.js      verificarToken, verificarRol
 │   ├── utils/                      lo que comparten los controladores

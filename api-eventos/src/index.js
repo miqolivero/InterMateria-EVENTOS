@@ -8,6 +8,7 @@ import tiposEventosRoutes from "./routes/tiposEventos.routes.js";
 import serviciosRoutes from "./routes/servicios.routes.js";
 import proveedoresRoutes from "./routes/proveedores.routes.js";
 import empleadosRoutes from "./routes/empleados.routes.js";
+import solicitudesRoutes from "./routes/solicitudes.routes.js";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -26,6 +27,9 @@ app.use("/api/tipos-eventos", tiposEventosRoutes);
 app.use("/api/servicios", serviciosRoutes);
 app.use("/api/proveedores", proveedoresRoutes);
 app.use("/api/empleados", empleadosRoutes);
+
+// Fase 3: solicitudes
+app.use("/api/solicitudes", solicitudesRoutes);
 
 // Ruta 404: siempre al final
 app.use((req, res) => {
