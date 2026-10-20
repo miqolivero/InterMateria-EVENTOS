@@ -532,8 +532,11 @@ Crea la versión 1 en `borrador`, sin renglones. Body opcional:
 
 Respuesta 201: **Presupuesto**.
 
-- 409 · `"La solicitud ya tiene presupuestos. Usá 'nueva versión'"`
-- 409 · `"La solicitud está <estado> y no admite presupuestos"` (si no está
+- 400 · `"La validez tiene que ser un numero de dias mayor a 0"` (si viene
+  `validez_dias` y no es un entero mayor a 0)
+- 404 · `"Solicitud no encontrada"`
+- 409 · `"La solicitud ya tiene presupuestos. Usa 'nueva version'"`
+- 409 · `"La solicitud esta <estado> y no admite presupuestos"` (si no está
   `pendiente` ni `presupuestada`)
 
 ### GET /presupuestos/:id
@@ -566,9 +569,14 @@ Errores:
 - 400 · `"El servicio y el importe al cliente son obligatorios"`
 - 400 · `"Los importes no pueden ser negativos"`
 - 400 · `"La cantidad tiene que ser mayor a 0"`
-- 400 · `"El servicio no existe o está inactivo"`
-- 400 · `"El proveedor no ofrece ese servicio"`
+- 400 · `"El servicio no existe o esta inactivo"`
+- 400 · `"El proveedor no ofrece ese servicio"` (también si el proveedor está
+  inactivo)
 - 409 · `"Solo se puede modificar un presupuesto en borrador"`
+
+Un importe que no es un número (`"abc"`) responde el 400 de importes, y una
+`cantidad` que no es un entero, el 400 de cantidad. El `importe_total` nunca se
+toma del body: si viene, se ignora.
 
 ### PUT /presupuestos/:id/detalle/:idDetalle
 
@@ -578,9 +586,11 @@ Respuesta 200: **Presupuesto**.
 
 Además, existe `PUT /presupuestos/:id` con `{ validez_dias, observaciones }`
 para editar la cabecera (solo en `borrador`). Respuesta 200: **Presupuesto**.
+Responde el mismo 400 de validez que la creación y el 409
+`"Solo se puede modificar un presupuesto en borrador"`.
 
 Si `:idDetalle` no existe o no es de ese
-presupuesto, 404 · `"Renglón no encontrado"`.
+presupuesto, 404 · `"Renglon no encontrado"`.
 
 ### DELETE /presupuestos/:id/detalle/:idDetalle
 
@@ -592,22 +602,31 @@ reciba los totales recalculados.
 ### PATCH /presupuestos/:id/presentar
 
 Pasa de `borrador` a `presentado`, y la solicitud a `presupuestada`. Sin body.
-Respuesta 200: **Presupuesto**.
+`fecha_emision` pasa a ser la fecha de hoy: la validez se cuenta desde que el
+cliente recibe la propuesta. Respuesta 200: **Presupuesto**.
 
 - 400 · `"No se puede presentar un presupuesto sin renglones"`
 - 409 · `"Solo se puede presentar un presupuesto en borrador"`
+- 409 · `"La solicitud esta <estado> y no admite presupuestos"` (si la
+  solicitud se canceló o se rechazó)
 
 ### POST /presupuestos/:id/nueva-version
 
 Crea una versión nueva en `borrador`, con `numero_version` = máximo + 1 y una
 copia del detalle. Se puede hacer desde `presentado` (y la versión anterior
 pasa a `reemplazado`) o desde `rechazado` (y la anterior queda `rechazado`).
-Todo en una transacción. Sin body.
+Todo en una transacción. Sin body. La versión nueva copia también
+`validez_dias` y `observaciones`, y su `fecha_emision` es la de hoy.
+
+Solo se puede crear desde la **última** versión: si no, desde una v1 rechazada
+se podría crear una v3 mientras la v2 sigue presentada.
 
 Respuesta 201: el **Presupuesto** nuevo.
 
-- 409 · `"Solo se puede crear una nueva versión desde un presupuesto presentado o rechazado"`
-- 409 · `"Ya hay una versión en borrador para esta solicitud"`
+- 409 · `"Solo se puede crear una nueva version desde un presupuesto presentado o rechazado"`
+- 409 · `"Ya hay una version en borrador para esta solicitud"`
+- 409 · `"Solo se puede crear una nueva version desde la ultima version"`
+- 409 · `"La solicitud esta <estado> y no admite presupuestos"`
 
 ### PATCH /presupuestos/:id/rechazar
 
@@ -1080,6 +1099,7 @@ Respuesta 200: **Evento (detalle)**.
 | --- | --- | --- | --- |
 | 2026-10-20 | 1 a 8 | Versión inicial completa, alineada con el `schema.sql` de la Fase 1 | ✔ |
 | 2026-10-20 | 3 | Mensajes de error sin tildes (`"El cliente no existe o esta inactivo"`, `"El tipo de evento no existe o esta inactivo"`, `"Estado invalido"`), como pide la convención. Se aclara que una fecha con formato inválido responde el 400 de obligatorios y que los filtros inválidos del listado se ignoran | ✘ |
+| 2026-10-20 | 4 | Mensajes sin tildes. Errores nuevos: 400 de `validez_dias`, 409 `"Solo se puede crear una nueva version desde la ultima version"` y 409 de solicitud cerrada al presentar o crear una versión. Al presentar, `fecha_emision` pasa a ser hoy. La nueva versión copia `validez_dias` y `observaciones`. Un proveedor inactivo responde "no ofrece ese servicio" | ✘ |
 
 ### Pendientes del back sobre la Fase 1 ya implementada
 

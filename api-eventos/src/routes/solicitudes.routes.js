@@ -7,6 +7,7 @@ import {
   editarSolicitud,
   cambiarEstadoSolicitud
 } from "../controllers/solicitudes.controller.js";
+import { crearPresupuesto } from "../controllers/presupuestos.controller.js";
 
 const router = Router();
 
@@ -22,5 +23,9 @@ router.put("/:id", editarSolicitud);
 // No hay DELETE: una solicitud que no sigue se cancela o se rechaza, asi queda
 // el registro de que el cliente pidio algo.
 router.patch("/:id/estado", cambiarEstadoSolicitud);
+
+// Fase 4: la version 1 del presupuesto se crea desde la solicitud. La logica
+// vive en el controlador de presupuestos, que es el dueno de esa tabla.
+router.post("/:id/presupuestos", crearPresupuesto);
 
 export default router;

@@ -184,6 +184,45 @@ piden token.
   presupuestos (fases 4 y 5).
 - No hay `DELETE`: una solicitud que no sigue se cancela o se rechaza.
 
+### Presupuestos · `/api/presupuestos`
+
+Las versiones de la propuesta al cliente. Todas las rutas piden token y todas
+devuelven el **Presupuesto completo** (cabecera, totales, solicitud, detalle y
+versiones), así el front siempre recibe los totales recalculados.
+
+| Método | Ruta | Acción | Respuesta |
+| --- | --- | --- | --- |
+| POST | `/api/solicitudes/:id/presupuestos` | Crear la versión 1 en borrador | 201 / 400 / 404 / 409 |
+| GET | `/:id` | Obtener uno | 200 / 404 |
+| PUT | `/:id` | Editar la cabecera (`validez_dias`, `observaciones`) | 200 / 400 / 404 / 409 |
+| POST | `/:id/detalle` | Agregar un renglón | 201 / 400 / 404 / 409 |
+| PUT | `/:id/detalle/:idDetalle` | Editar un renglón | 200 / 400 / 404 / 409 |
+| DELETE | `/:id/detalle/:idDetalle` | Borrar un renglón (200, no 204) | 200 / 404 / 409 |
+| PATCH | `/:id/presentar` | De borrador a presentado | 200 / 400 / 404 / 409 |
+| POST | `/:id/nueva-version` | Copiar a una versión nueva en borrador | 201 / 404 / 409 |
+| PATCH | `/:id/rechazar` | De presentado a rechazado | 200 / 404 / 409 |
+
+- **El total lo calcula la API** (regla 2): `importe_total` es siempre la suma
+  de `importe_cliente` del detalle y se recalcula en la misma transacción que
+  modifica un renglón. Si llega en el body, se ignora. `total_costo`,
+  `total_margen` y el `margen` de cada renglón se calculan en el SQL.
+- **Solo se edita en `borrador`** (regla 3). Presentar pasa la solicitud a
+  `presupuestada` y la `fecha_emision` a hoy. Para cambiar un presupuesto
+  presentado o rechazado se crea una **nueva versión**: copia la cabecera y el
+  detalle, toma `numero_version` + 1 y, si la anterior estaba presentada, la
+  pasa a `reemplazado`. Solo se puede hacer desde la última versión y si no hay
+  otra en borrador.
+- **Renglones:** el servicio tiene que ser de la empresa y estar activo. El
+  proveedor es opcional, pero si viene tiene que ser de la empresa, estar activo
+  y **ofrecer ese servicio** (`proveedores_x_servicio`).
+- Una solicitud cancelada o rechazada no admite presupuestos nuevos, ni
+  presentar, ni nuevas versiones (409).
+- **Multitenant:** la tabla `presupuestos` no tiene `id_empresa`; todas las
+  consultas entran por la solicitud (`JOIN solicitudes ... AND s.id_empresa`).
+- Los pasos que tocan más de una fila (crear, renglones, presentar, nueva
+  versión) van en una transacción con la fila bloqueada (`SELECT ... FOR
+  UPDATE`), para que dos pedidos simultáneos no dejen datos inconsistentes.
+
 El contrato completo, con el JSON de cada respuesta y los mensajes de error
 exactos, está en `docs/API.md`.
 
@@ -237,7 +276,8 @@ api-eventos/
 │   │   ├── servicios.routes.js
 │   │   ├── proveedores.routes.js   incluye /:id/servicios
 │   │   ├── empleados.routes.js
-│   │   └── solicitudes.routes.js
+│   │   ├── solicitudes.routes.js   incluye /:id/presupuestos
+│   │   └── presupuestos.routes.js
 │   ├── controllers/                un controlador por recurso
 │   │   ├── auth.controller.js      registrar, login, perfil
 │   │   ├── empresas.controller.js
@@ -246,12 +286,14 @@ api-eventos/
 │   │   ├── servicios.controller.js
 │   │   ├── proveedores.controller.js
 │   │   ├── empleados.controller.js
-│   │   └── solicitudes.controller.js
+│   │   ├── solicitudes.controller.js
+│   │   └── presupuestos.controller.js
 │   ├── middlewares/
 │   │   └── auth.middleware.js      verificarToken, verificarRol
 │   ├── utils/                      lo que comparten los controladores
 │   │   ├── errores.js              traduce los errores de pg a HTTP
-│   │   └── consultas.js            filtros de listado y chequeo por empresa
+│   │   ├── consultas.js            filtros de listado y chequeo por empresa
+│   │   └── validaciones.js         formatos de ids, fechas, importes y cantidades
 │   └── data/
 │       └── db.js                   pool de pg y parsers de fecha y monto
 └── .env                            no se versiona

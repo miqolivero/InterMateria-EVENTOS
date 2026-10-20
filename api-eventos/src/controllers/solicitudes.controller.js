@@ -1,6 +1,7 @@
 import pool from "../data/db.js";
 import { responderError } from "../utils/errores.js";
 import { existeEnEmpresa } from "../utils/consultas.js";
+import { esIdValido, esFechaValida } from "../utils/validaciones.js";
 
 // Solicitudes: el pedido inicial del cliente, antes de cualquier presupuesto.
 // Como todo el sistema es multitenant, TODAS las consultas filtran por
@@ -61,22 +62,6 @@ const buscarSolicitud = async (idSolicitud, idEmpresa) => {
   );
 
   return resultado.rows[0] ?? null;
-};
-
-// Un id valido es un entero positivo. Se chequea antes de mandarlo a la base:
-// si no, un "abc" hace fallar el cast de PostgreSQL y terminaria en un 500.
-const esIdValido = (valor) => Number.isInteger(Number(valor)) && Number(valor) > 0;
-
-// Fecha con formato YYYY-MM-DD y que exista en el calendario (2026-02-31 no).
-// Se compara contra lo que devuelve toISOString porque Date "corrige" las
-// fechas imposibles en vez de fallar (el 31 de febrero pasa a ser 3 de marzo).
-const esFechaValida = (valor) => {
-  if (typeof valor !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(valor)) {
-    return false;
-  }
-
-  const fecha = new Date(`${valor}T00:00:00Z`);
-  return !isNaN(fecha) && fecha.toISOString().slice(0, 10) === valor;
 };
 
 // Validaciones comunes del POST y del PUT ("mismo body y mismas validaciones"

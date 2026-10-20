@@ -9,6 +9,7 @@ import serviciosRoutes from "./routes/servicios.routes.js";
 import proveedoresRoutes from "./routes/proveedores.routes.js";
 import empleadosRoutes from "./routes/empleados.routes.js";
 import solicitudesRoutes from "./routes/solicitudes.routes.js";
+import presupuestosRoutes from "./routes/presupuestos.routes.js";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -30,6 +31,9 @@ app.use("/api/empleados", empleadosRoutes);
 
 // Fase 3: solicitudes
 app.use("/api/solicitudes", solicitudesRoutes);
+
+// Fase 4: presupuestos (la version 1 se crea en /api/solicitudes/:id/presupuestos)
+app.use("/api/presupuestos", presupuestosRoutes);
 
 // Ruta 404: siempre al final
 app.use((req, res) => {
