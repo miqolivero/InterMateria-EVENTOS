@@ -43,17 +43,20 @@ Node 18+, Express 4, ES Modules (`"type": "module"`), `pg`, `dotenv`, `cors`,
 
 ## Contrato (docs/API.md)
 
-**El primer paso de cada fase de backend es escribir su sección en
-`docs/API.md`, antes de implementar.** Por cada endpoint va:
+`docs/API.md` ya tiene el contrato completo de todas las fases, y el frontend
+construye las pantallas a partir de él. Por eso:
 
-- método y ruta;
-- quién puede usarlo (público, con token o solo admin);
-- body de ejemplo;
-- respuesta de ejemplo (JSON real, con todos los campos y sus nombres exactos);
-- códigos de error posibles, con su `mensaje`.
-
-Después de esa sección el contrato no se cambia sin avisar al frontend. Si al
-implementar hace falta cambiarlo, frenar y preguntar.
+- Se implementa **exactamente** lo que dice: mismas rutas, mismos nombres de
+  campos (incluidos los calculados y los de JOINs), mismos códigos y mismos
+  mensajes de error.
+- Las reglas de "Convenciones generales" del contrato valen para todos los
+  endpoints: fechas como string `YYYY-MM-DD`, montos como número y listados
+  como array.
+- Para fechas y montos, en `src/data/db.js` configurar
+  `pg.types.setTypeParser(1082, v => v)` y `pg.types.setTypeParser(1700, parseFloat)`.
+- Si al implementar algo no cierra o falta, **frenar y preguntar**. Si se
+  cambia, se actualiza `docs/API.md`, se anota en su "Historial de cambios" y
+  se avisa al frontend.
 
 ## Verificación al terminar cada fase
 

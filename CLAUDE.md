@@ -50,9 +50,10 @@ Somos dos personas: una a cargo del **backend** y otra del **frontend**.
 
 - **Cada uno toca solo su carpeta.** Si la sesión es de backend, no se modifica
   nada en `front-eventos/`, y al revés.
-- **`docs/API.md` es el contrato.** Lo escribe el backend **antes** de
-  implementar cada fase. El frontend construye contra ese contrato. Si el
-  frontend necesita un cambio, lo pide; no lo modifica por su cuenta.
+- **`docs/API.md` es el contrato** y ya está escrito para todas las fases. El
+  backend lo implementa tal cual y el frontend construye contra él. Solo lo
+  modifica el backend; si el frontend necesita un cambio, lo pide. Cada cambio
+  se anota en el "Historial de cambios" al final del archivo.
 - **No cambiar un endpoint que ya está en el contrato** sin avisar al otro: le
   rompe las pantallas.
 - **Archivos compartidos** (`CLAUDE.md` de la raíz, `ROADMAP.md`, el DER): se
@@ -63,14 +64,16 @@ Somos dos personas: una a cargo del **backend** y otra del **frontend**.
 ## Modelo de datos
 
 La PK de cada tabla es `id_<entidad>` (como `id_empresa`). Los estados son
-`VARCHAR` con `CHECK` y una lista cerrada. El script completo va en
+`VARCHAR` con `CHECK` y una lista cerrada. El script completo está en
 `api-eventos/database/schema.sql` y los datos de prueba en `seed.sql`.
+**Si esta tabla y `schema.sql` no coinciden, manda `schema.sql`**: acá van
+solo los campos clave.
 
 | Tabla | Para qué | Campos clave |
 | --- | --- | --- |
 | `empresas` | Organizadora (tenant) | `nombre`, `cuit` UNIQUE, contacto, `activo` |
 | `usuarios` | Login | `email` UNIQUE, `password` (hash), `rol` (`admin`/`usuario`), `id_empresa`, `id_empleado` NULL, `activo` |
-| `clientes` | Quien encarga el evento | `id_empresa` NOT NULL, `nombre`, `apellido`, `dni_cuit`, contacto |
+| `clientes` | Quien encarga el evento | `id_empresa` NOT NULL, `nombre`, `apellido`, `dni_cuit`, `direccion`, contacto, `activo`, `fecha_alta` |
 | `tipos_eventos` | Cumpleaños, egresados... | `id_empresa`, `nombre`, `activo` |
 | `empleados` | Personal | `legajo`, `nombre`, `apellido`, `rol`, contacto |
 | `empleados_x_empresa` | Empleado ↔ empresa (N:M con historial) | `cargo`, `fecha_inicio`, `fecha_fin`, `activo` |

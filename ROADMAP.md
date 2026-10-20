@@ -15,22 +15,21 @@ Las convenciones de cada parte están en `api-eventos/CLAUDE.md` y en
 
 ## Cómo trabajamos en paralelo
 
+El contrato de **todas** las fases ya está en `docs/API.md`. Por eso los dos
+pueden avanzar a la vez sin esperarse:
+
 ```
-         Fase N                                Fase N+1
-Back  ── [contrato N] ── [implementa N] ─┬─ [contrato N+1] ── [implementa N+1] ──
-                │                         │        │
-Front ──────────┴── [pantallas N contra contrato] ─┴─ [prueba N con API real] ── [pantallas N+1] ──
+Back  ── [revisa contrato N] ── [implementa N] ── [PR N] ── [revisa contrato N+1] ── ...
+Front ── [pantallas N contra el contrato] ─────── [prueba N con la API real] ── [pantallas N+1] ── ...
 ```
 
-1. **Contrato primero.** Al empezar cada fase, el back escribe su sección en
-   `docs/API.md` (endpoints, body y respuesta de ejemplo, errores) y la sube en
-   un PR chico. Es lo primero que se mergea.
-2. Con el contrato en `main`, el **front arma las pantallas** mientras el back
-   implementa.
-3. Cuando el back mergea la implementación, el front **prueba contra la API
-   real** y corrige lo que haga falta.
-4. Mientras el front termina la fase N, el back ya puede escribir el contrato de
-   la N+1.
+1. Al empezar cada fase, el back **revisa** su sección del contrato. Si hace
+   falta un ajuste, lo cambia, lo anota en el "Historial de cambios" de
+   `docs/API.md` y avisa antes de implementar.
+2. El front arma las pantallas contra el contrato, aunque la API todavía no
+   esté implementada.
+3. Cuando el back mergea la fase, el front prueba contra la API real y corrige
+   lo que haga falta.
 
 **Reglas del equipo:**
 
@@ -47,7 +46,7 @@ Front ──────────┴── [pantallas N contra contrato] ─�
 
 | # | Fase | Back (Miqueas) | Front (Compañero) |
 | --- | --- | --- | --- |
-| 0 | Puesta en marcha | Archivos de documentación, ramas, base local | Igual, más instalar antd |
+| 0 | Puesta en marcha | Documentación, ramas, base local | Lo mismo, más leer el contrato completo |
 | 1 | Base de datos y multitenant | Esquema completo, usuarios en BD, token con empresa | Layout con Ant Design y migrar las pantallas existentes |
 | 2 | Catálogos | ABM de clientes, tipos de evento, servicios, proveedores y empleados | Pantallas de catálogos |
 | 3 | Solicitudes | ABM con filtros y cambios de estado | Listado, formulario y detalle |
@@ -80,16 +79,20 @@ Front ──────────┴── [pantallas N contra contrato] ─�
 **Objetivo:** base completa con datos de prueba, cada usuario atado a una
 empresa y la interfaz base con Ant Design.
 
-### Backend · Miqueas
+### Backend · Miqueas · ✅ implementada
+
+> Quedan 3 pendientes chicos, listados al final de `docs/API.md` (login con
+> `id_usuario`, parsers de `pg` en `db.js` y 409 al borrar una empresa con datos).
+> Resolverlos antes de empezar la Fase 2.
 
 > ⚠️ Hoy los usuarios están en memoria porque así lo pedía la guía de la
 > materia. Esta fase los pasa a una tabla, porque el sistema multitenant
 > necesita saber de qué empresa es cada usuario. Si la cátedra exige
 > mantenerlos en memoria, alcanza con agregar `id_empresa` al array y al token.
 
-- **Contrato:** actualizar en `docs/API.md` las secciones de auth y empresas.
-  El registro recibe `id_empresa`; el login devuelve `usuario` con
-  `id_empresa` y `nombre_empresa`.
+- **Contrato:** revisar la "Fase 1" de `docs/API.md`. El registro recibe
+  `id_empresa`; el login devuelve `usuario` con `id_empresa`, `nombre_empresa`
+  e `id_empleado`.
 - `database/schema.sql`: **todas** las tablas de `CLAUDE.md`, con PK, FK,
   UNIQUE, CHECK de estados, NOT NULL e índices sobre las FK que se usan para
   filtrar. Incluye `usuarios` y `tipos_tarea`.
@@ -142,7 +145,7 @@ empresa y la interfaz base con Ant Design.
 
 ### Backend · Miqueas
 
-- **Contrato** de todos los endpoints de la fase.
+- **Contrato:** revisar la "Fase 2" de `docs/API.md`.
 - `/api/clientes`, `/api/tipos-eventos`, `/api/servicios`, `/api/proveedores`,
   `/api/empleados`: GET (listado y por id), POST, PUT y baja lógica con
   `PATCH /:id/activo`.
@@ -182,7 +185,7 @@ empresa y la interfaz base con Ant Design.
 
 ### Backend · Miqueas
 
-- **Contrato.**
+- **Contrato:** revisar la "Fase 3" de `docs/API.md`.
 - `GET /api/solicitudes` con filtros `?estado=`, `?id_cliente=` y
   `?desde=&hasta=` (sobre `fecha_evento_prevista`). Cada fila trae el nombre del
   cliente y el tipo de evento.
@@ -218,7 +221,7 @@ empresa y la interfaz base con Ant Design.
 
 ### Backend · Miqueas
 
-- **Contrato.**
+- **Contrato:** revisar la "Fase 4" de `docs/API.md`.
 - `POST /api/solicitudes/:id/presupuestos`: crea la versión 1 en `borrador`. Si
   la solicitud ya tiene versiones, 409.
 - `GET /api/presupuestos/:id`: cabecera + detalle con los nombres de servicio y
@@ -232,7 +235,8 @@ empresa y la interfaz base con Ant Design.
   `presupuestada`. Sin renglones, responde 400.
 - `POST /:id/nueva-version`: solo desde `presentado`. Copia el detalle a una
   versión nueva y la anterior pasa a `reemplazado`. Todo en una transacción.
-- `PATCH /:id/rechazar`: de `presentado` a `rechazado`.
+- `PATCH /:id/rechazar`: de `presentado` a `rechazado`. Después de un
+  rechazo también se puede crear una nueva versión.
 
 **Listo cuando:**
 
@@ -259,7 +263,7 @@ empresa y la interfaz base con Ant Design.
 
 ### Backend · Miqueas
 
-- **Contrato.**
+- **Contrato:** revisar la "Fase 5" de `docs/API.md`.
 - `POST /api/presupuestos/:id/aceptar` con `{ fecha_evento_confirmada,
   sede_acordada, condiciones_acordadas, id_empleado_coordinador }`:
   - solo desde `presentado`;
@@ -295,7 +299,7 @@ empresa y la interfaz base con Ant Design.
 
 ### Backend · Miqueas
 
-- **Contrato.**
+- **Contrato:** revisar la "Fase 6" de `docs/API.md`.
 - `PATCH /api/servicios-evento/:id`: estado del proveedor (si pasa a
   `confirmada`, guarda la fecha), proveedor, costos y observaciones.
 - `POST /api/servicios-evento/:id/generar-tareas` con
@@ -332,7 +336,7 @@ falta resolver con varios eventos en paralelo.
 
 ### Backend · Miqueas
 
-- **Contrato.**
+- **Contrato:** revisar la "Fase 7" de `docs/API.md`.
 - `GET /api/seguimiento/resumen`: cantidades de eventos próximos (30 días),
   tareas vencidas, tareas pendientes, servicios sin confirmar y solicitudes
   pendientes.
@@ -363,7 +367,7 @@ falta resolver con varios eventos en paralelo.
 
 ### Backend · Miqueas
 
-- **Contrato.**
+- **Contrato:** revisar la "Fase 8" de `docs/API.md`.
 - `PATCH /api/eventos/:id/cerrar` con
   `{ estado: 'realizado' | 'cancelado', observaciones_cierre }`:
   - si se cancela, las observaciones son obligatorias;
