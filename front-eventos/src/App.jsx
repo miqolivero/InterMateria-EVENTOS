@@ -1,50 +1,52 @@
-import { Routes, Route } from "react-router-dom";
-import Navbar from "./componentes/Navbar";
+import { Navigate, Route, Routes } from "react-router-dom";
+import { lazy, Suspense } from "react";
+import { Spin } from "antd";
 import RutaProtegida from "./componentes/RutaProtegida";
-import Empresas from "./paginas/Empresas";
-import EmpresaForm from "./paginas/EmpresaForm";
-import Login from "./paginas/Login";
-import Registro from "./paginas/Registro";
-import NoEncontrada from "./paginas/NoEncontrada";
+import { useSesion } from "./contexto/useSesion";
 import "./App.css";
 
-// Las rutas del front no son las rutas de la API: aca se define que pantalla
-// se muestra en cada URL del navegador.
-function App() {
-  return (
-    <div className="app">
-      <Navbar />
+// La tabla y las herramientas de cada pantalla se descargan cuando se necesitan.
+const LayoutPrincipal = lazy(() => import("./componentes/LayoutPrincipal"));
+const Empresas = lazy(() => import("./paginas/Empresas"));
+const EmpresaForm = lazy(() => import("./paginas/EmpresaForm"));
+const Login = lazy(() => import("./paginas/Login"));
+const Registro = lazy(() => import("./paginas/Registro"));
+const NoEncontrada = lazy(() => import("./paginas/NoEncontrada"));
+const Catalogo = lazy(() => import("./paginas/Catalogo"));
+const Catalogos = lazy(() => import("./paginas/Catalogo").then((m) => ({ default: m.Catalogos })));
+const Solicitudes = lazy(() => import("./paginas/Solicitudes"));
+const SolicitudDetalle = lazy(() => import("./paginas/Solicitudes").then((m) => ({ default: m.SolicitudDetalle })));
+const Presupuesto = lazy(() => import("./paginas/Presupuesto"));
+const Eventos = lazy(() => import("./paginas/Eventos"));
+const EventoDetalle = lazy(() => import("./paginas/Eventos").then((m) => ({ default: m.EventoDetalle })));
+const MisTareas = lazy(() => import("./componentes/TareasEvento").then((m) => ({ default: m.MisTareas })));
+const Seguimiento = lazy(() => import("./paginas/Seguimiento"));
 
-      <main className="app-contenido">
-        <Routes>
-          {/* Publicas */}
-          <Route path="/" element={<Empresas />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/registro" element={<Registro />} />
-
-          {/* Protegidas: sin token te manda al login */}
-          <Route
-            path="/empresas/nueva"
-            element={
-              <RutaProtegida>
-                <EmpresaForm />
-              </RutaProtegida>
-            }
-          />
-          <Route
-            path="/empresas/:id/editar"
-            element={
-              <RutaProtegida>
-                <EmpresaForm />
-              </RutaProtegida>
-            }
-          />
-
-          <Route path="*" element={<NoEncontrada />} />
-        </Routes>
-      </main>
-    </div>
-  );
+function Inicio() {
+  const { usuario } = useSesion();
+  return usuario ? <Navigate to="/seguimiento" replace /> : <Empresas publico />;
 }
 
-export default App;
+export default function App() {
+  return <Suspense fallback={<div className="pantalla-espera"><Spin size="large" /><p>Cargando tu espacio…</p></div>}><Routes>
+    <Route path="/" element={<Inicio />} />
+    <Route path="/login" element={<Login />} />
+    <Route path="/registro" element={<Registro />} />
+    <Route element={<RutaProtegida><LayoutPrincipal /></RutaProtegida>}>
+      <Route path="/empresas" element={<Empresas />} />
+      <Route path="/empresas/nueva" element={<RutaProtegida soloAdmin><EmpresaForm /></RutaProtegida>} />
+      <Route path="/empresas/:id/editar" element={<RutaProtegida soloAdmin><EmpresaForm /></RutaProtegida>} />
+      <Route path="/seguimiento" element={<Seguimiento />} />
+      <Route path="/mis-tareas" element={<MisTareas />} />
+      <Route path="/solicitudes" element={<Solicitudes />} />
+      <Route path="/solicitudes/:id" element={<SolicitudDetalle />} />
+      <Route path="/presupuestos/:id" element={<Presupuesto />} />
+      <Route path="/eventos" element={<Eventos />} />
+      <Route path="/eventos/:id" element={<EventoDetalle />} />
+      <Route path="/clientes" element={<Catalogo recurso="clientes" />} />
+      <Route path="/catalogos" element={<Catalogos />} />
+      <Route path="/personal" element={<Catalogo recurso="empleados" />} />
+    </Route>
+    <Route path="*" element={<NoEncontrada />} />
+  </Routes></Suspense>;
+}
