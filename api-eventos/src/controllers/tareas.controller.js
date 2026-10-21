@@ -49,7 +49,7 @@ export const CONDICION_VENCIDA = `(t.fecha_prevista IS NOT NULL
 //
 // columnasExtra / joinsExtra: "mis tareas" agrega datos del evento (cliente,
 // tipo, fecha) sin repetir toda la consulta.
-const selectTarea = (columnasExtra = "", joinsExtra = "") => `
+export const selectTarea = (columnasExtra = "", joinsExtra = "") => `
   SELECT t.id_tarea, t.id_evento, t.id_servicio_x_evento,
          sv.nombre AS nombre_servicio,
          pr.razon_social AS nombre_proveedor,
@@ -70,6 +70,18 @@ const selectTarea = (columnasExtra = "", joinsExtra = "") => `
   ${joinsExtra}`;
 
 export const SELECT_TAREA = selectTarea();
+
+// Los tres datos del evento que agregan "mis tareas" y las tareas vencidas del
+// tablero, para que la persona sepa de que evento es cada tarea sin abrirlo.
+export const COLUMNAS_EVENTO_DE_TAREA = `,
+  c.nombre || ' ' || c.apellido AS nombre_cliente,
+  te.nombre AS nombre_tipo_evento,
+  e.fecha_evento_confirmada`;
+
+export const JOINS_EVENTO_DE_TAREA = `
+  JOIN solicitudes s ON s.id_solicitud = e.id_solicitud
+  JOIN clientes c ON c.id_cliente = s.id_cliente
+  JOIN tipos_eventos te ON te.id_tipo_evento = s.id_tipo_evento`;
 
 // Orden del contrato: primero las tareas con servicio (por servicio y por paso)
 // y despues las libres (por fecha prevista).
@@ -456,16 +468,7 @@ export const obtenerMisTareas = async (req, res) => {
       condiciones.push(`t.estado_tarea = $${valores.length}`);
     }
 
-    // Tres datos del evento mas, para que la persona sepa de que evento es
-    // cada tarea sin abrirlo
-    const consulta = selectTarea(
-      `, c.nombre || ' ' || c.apellido AS nombre_cliente,
-         te.nombre AS nombre_tipo_evento,
-         e.fecha_evento_confirmada`,
-      `JOIN solicitudes s ON s.id_solicitud = e.id_solicitud
-       JOIN clientes c ON c.id_cliente = s.id_cliente
-       JOIN tipos_eventos te ON te.id_tipo_evento = s.id_tipo_evento`
-    );
+    const consulta = selectTarea(COLUMNAS_EVENTO_DE_TAREA, JOINS_EVENTO_DE_TAREA);
 
     // Primero las vencidas (true va antes con DESC), despues por fecha
     const resultado = await pool.query(

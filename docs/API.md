@@ -996,6 +996,12 @@ Todo se calcula sobre **eventos abiertos** (`confirmado` o `en_preparacion`) de
 la empresa del usuario. Todos los endpoints aceptan `?dias=7|15|30` (por defecto
 30): la ventana de días hacia adelante para los "próximos".
 
+- `?dias` acepta cualquier entero de 1 a 365. Un valor inválido usa 30.
+- `?dias` **solo** afecta a los próximos (`eventos_proximos` y
+  `/proximos-eventos`). Las tareas vencidas y los servicios sin confirmar son
+  siempre de **todos** los eventos abiertos, en el resumen y en sus listas: así
+  el número de cada tarjeta coincide con el largo de su lista.
+
 ### GET /seguimiento/resumen
 
 Respuesta 200:
@@ -1041,6 +1047,8 @@ Respuesta 200, ordenada por fecha:
 ```
 
 `porcentaje_avance` es un entero de 0 a 100. Vale 0 si no hay tareas.
+`total_tareas` cuenta todas las tareas del evento (de la secuencia y libres).
+`nombre_coordinador` es `null` si el evento no tiene coordinador.
 
 ### GET /seguimiento/tareas-vencidas
 
@@ -1124,6 +1132,7 @@ Respuesta 200: **Evento (detalle)**.
 | 2026-10-20 | 4 | Mensajes sin tildes. Errores nuevos: 400 de `validez_dias`, 409 `"Solo se puede crear una nueva version desde la ultima version"` y 409 de solicitud cerrada al presentar o crear una versión. Al presentar, `fecha_emision` pasa a ser hoy. La nueva versión copia `validez_dias` y `observaciones`. Un proveedor inactivo responde "no ofrece ese servicio" | ✘ |
 | 2026-10-20 | 5 | Mensajes sin tildes (`"El evento esta cerrado..."`, `"...iniciar la preparacion..."`). Aceptar responde 409 `"La solicitud esta <estado> y no admite presupuestos"` si la solicitud está cerrada. Se aclara que el coordinador es opcional, que la validez vencida no impide aceptar y que el PUT reemplaza el objeto completo | ✘ |
 | 2026-10-20 | 6 | Mensajes sin tildes. Reabrir un paso completado se bloquea también hacia `en_curso` (no solo hacia `pendiente`) si el siguiente ya empezó. Se aclara: fecha de confirmación y de finalización se conservan si se repite el estado, `id_proveedor: null` desasigna, body vacío en el PATCH responde 200, dos pasos pueden tener la misma fecha | ✘ |
+| 2026-10-20 | 7 | Se aclara el alcance de `?dias` (solo los próximos; acepta de 1 a 365, inválido = 30) y que `total_tareas` incluye las tareas libres. Sin cambios en los campos | ✘ |
 
 ### Pendientes del back sobre la Fase 1 ya implementada
 

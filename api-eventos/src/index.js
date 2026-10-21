@@ -13,6 +13,7 @@ import presupuestosRoutes from "./routes/presupuestos.routes.js";
 import eventosRoutes from "./routes/eventos.routes.js";
 import serviciosEventoRoutes from "./routes/serviciosEvento.routes.js";
 import tareasRoutes from "./routes/tareas.routes.js";
+import seguimientoRoutes from "./routes/seguimiento.routes.js";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -44,6 +45,9 @@ app.use("/api/eventos", eventosRoutes);
 // Fase 6: servicios del evento y tareas
 app.use("/api/servicios-evento", serviciosEventoRoutes);
 app.use("/api/tareas", tareasRoutes);
+
+// Fase 7: tablero de seguimiento
+app.use("/api/seguimiento", seguimientoRoutes);
 
 // Ruta 404: siempre al final
 app.use((req, res) => {

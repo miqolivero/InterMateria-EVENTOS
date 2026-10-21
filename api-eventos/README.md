@@ -290,6 +290,26 @@ rutas piden token.
   no tiene empleado vinculado, devuelve `[]`. Solo muestra eventos abiertos,
   primero las vencidas.
 
+### Seguimiento · `/api/seguimiento`
+
+El tablero de inicio: qué falta resolver con varios eventos en paralelo. Solo
+lectura, siempre sobre los eventos **abiertos** de la empresa.
+
+| Método | Ruta | Devuelve |
+| --- | --- | --- |
+| GET | `/resumen?dias=30` | Cantidades: eventos próximos, tareas vencidas y pendientes, servicios sin confirmar, solicitudes pendientes |
+| GET | `/proximos-eventos?dias=30` | Por evento: días restantes, % de avance, vencidas y servicios sin confirmar |
+| GET | `/tareas-vencidas` | Las tareas vencidas con los datos del evento y `dias_vencida` |
+| GET | `/servicios-sin-confirmar` | Servicios en `solicitada` o sin proveedor, del evento más cercano al más lejano |
+
+- Todo se calcula **en SQL** con `COUNT(*) FILTER (WHERE ...)` y subconsultas,
+  sin recorrer filas en JavaScript. En los próximos eventos, tareas y servicios
+  se cuentan en dos `LATERAL` separados: juntarlos en un mismo `GROUP BY`
+  multiplicaría las filas y los conteos saldrían inflados.
+- `?dias` (1 a 365, por defecto 30) solo cambia la ventana de los "próximos".
+  Las vencidas y los servicios sin confirmar son de todos los eventos abiertos.
+- "Vencida" usa la misma condición que las tareas (`CONDICION_VENCIDA`, regla 1).
+
 El contrato completo, con el JSON de cada respuesta y los mensajes de error
 exactos, está en `docs/API.md`.
 
@@ -347,7 +367,8 @@ api-eventos/
 │   │   ├── presupuestos.routes.js  incluye /:id/aceptar
 │   │   ├── eventos.routes.js       incluye /:id/servicios y /:id/tareas
 │   │   ├── serviciosEvento.routes.js
-│   │   └── tareas.routes.js        incluye /mias
+│   │   ├── tareas.routes.js        incluye /mias
+│   │   └── seguimiento.routes.js
 │   ├── controllers/                un controlador por recurso
 │   │   ├── auth.controller.js      registrar, login, perfil
 │   │   ├── empresas.controller.js
@@ -360,7 +381,8 @@ api-eventos/
 │   │   ├── presupuestos.controller.js
 │   │   ├── eventos.controller.js   incluye aceptar (regla 4)
 │   │   ├── serviciosEvento.controller.js  estado del proveedor y generar tareas
-│   │   └── tareas.controller.js    secuencia, vencida y mis tareas
+│   │   ├── tareas.controller.js    secuencia, vencida y mis tareas
+│   │   └── seguimiento.controller.js  consultas agregadas del tablero
 │   ├── middlewares/
 │   │   └── auth.middleware.js      verificarToken, verificarRol
 │   ├── utils/                      lo que comparten los controladores
