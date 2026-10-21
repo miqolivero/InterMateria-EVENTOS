@@ -9,8 +9,12 @@ import {
   obtenerServiciosDelProveedor,
   reemplazarServiciosDelProveedor
 } from "../controllers/proveedores.controller.js";
+import { validarParamId } from "../middlewares/validarId.middleware.js";
 
 const router = Router();
+
+// Un :id con formato invalido es un registro que no existe: 404
+router.param("id", validarParamId("Proveedor no encontrado"));
 
 router.use(verificarToken);
 

@@ -54,6 +54,21 @@ app.use((req, res) => {
   res.status(404).json({ mensaje: "Ruta no encontrada" });
 });
 
+// Manejador de errores de Express (4 parametros): lo que se escapa de los
+// controladores. El caso tipico es un body que no es JSON valido: sin esto,
+// express.json() responde una pagina HTML y el front no puede leer el mensaje.
+// eslint-disable-next-line no-unused-vars
+app.use((error, req, res, next) => {
+  if (error.type === "entity.parse.failed") {
+    return res
+      .status(400)
+      .json({ mensaje: "El cuerpo del pedido no es un JSON valido" });
+  }
+
+  console.error(error);
+  res.status(500).json({ mensaje: "Error interno del servidor" });
+});
+
 app.listen(PORT, () => {
   console.log(`Servidor escuchando en http://localhost:${PORT}`);
 });

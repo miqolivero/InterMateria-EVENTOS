@@ -1,7 +1,11 @@
 import pool from "../data/db.js";
 import { responderError } from "../utils/errores.js";
 import { esEmpleadoActivo } from "../utils/consultas.js";
-import { esIdValido, esFechaValida } from "../utils/validaciones.js";
+import {
+  esIdValido,
+  esFechaValida,
+  esVacio
+} from "../utils/validaciones.js";
 
 // Eventos: nacen al aceptar un presupuesto (regla 4) y desde ahi se coordinan.
 // La tabla eventos SI tiene id_empresa (se guarda la del token al crearlo),
@@ -32,14 +36,12 @@ const solicitudCerrada = (estado) =>
 
 const ESTADOS_SOLICITUD_ABIERTA = ["pendiente", "presupuestada"];
 
-const vacio = (valor) => valor === undefined || valor === null || valor === "";
-
 // Objeto Evento (listado). El coordinador va con LEFT JOIN porque es opcional:
 // con un JOIN comun, un evento sin coordinador desapareceria del listado.
 // nombre_coordinador queda null en ese caso (null || ' ' || null = null).
 const SELECT_EVENTO_LISTADO = `
   SELECT e.id_evento, e.id_solicitud,
-         c.nombre || ' ' || c.apellido AS nombre_cliente,
+         CONCAT_WS(' ', c.nombre, NULLIF(c.apellido, '-')) AS nombre_cliente,
          te.nombre AS nombre_tipo_evento,
          e.fecha_evento_confirmada, e.sede_acordada, s.cantidad_asistentes,
          e.id_empleado_coordinador,
@@ -152,7 +154,7 @@ const validarDatosEvento = async (body) => {
     return MENSAJES.fechaPasada;
   }
 
-  if (!vacio(id_empleado_coordinador) && !esIdValido(id_empleado_coordinador)) {
+  if (!esVacio(id_empleado_coordinador) && !esIdValido(id_empleado_coordinador)) {
     return MENSAJES.coordinadorInvalido;
   }
 
@@ -163,7 +165,7 @@ const validarDatosEvento = async (body) => {
 // del token (regla 9): sin esto se podria asignar a alguien de otra empresa o
 // a un empleado dado de baja.
 const coordinadorValido = async (ejecutor, idCoordinador, idEmpresa) =>
-  vacio(idCoordinador) || esEmpleadoActivo(ejecutor, idCoordinador, idEmpresa);
+  esVacio(idCoordinador) || esEmpleadoActivo(ejecutor, idCoordinador, idEmpresa);
 
 // ---------------------------------------------------------------------------
 // Endpoints
@@ -276,7 +278,7 @@ export const aceptarPresupuesto = async (req, res) => {
         idEmpresa,
         id_solicitud,
         req.params.id,
-        vacio(id_empleado_coordinador) ? null : id_empleado_coordinador,
+        esVacio(id_empleado_coordinador) ? null : id_empleado_coordinador,
         fecha_evento_confirmada,
         sede_acordada ?? null,
         condiciones_acordadas ?? null
@@ -339,7 +341,7 @@ export const obtenerEventos = async (req, res) => {
   if (id_coordinador && esIdValido(id_coordinador)) {
     agregar("e.id_empleado_coordinador = ?", id_coordinador);
   }
-  if (buscar) agregar("(c.nombre || ' ' || c.apellido) ILIKE ?", `%${buscar}%`);
+  if (buscar) agregar("(CONCAT_WS(' ', c.nombre, NULLIF(c.apellido, '-'))) ILIKE ?", `%${buscar}%`);
 
   try {
     const resultado = await pool.query(
@@ -416,7 +418,7 @@ export const editarEvento = async (req, res) => {
         fecha_evento_confirmada,
         sede_acordada ?? null,
         condiciones_acordadas ?? null,
-        vacio(id_empleado_coordinador) ? null : id_empleado_coordinador,
+        esVacio(id_empleado_coordinador) ? null : id_empleado_coordinador,
         req.params.id,
         idEmpresa,
         ESTADOS_ABIERTOS

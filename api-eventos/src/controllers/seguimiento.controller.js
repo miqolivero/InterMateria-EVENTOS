@@ -85,7 +85,7 @@ export const obtenerProximosEventos = async (req, res) => {
   try {
     const resultado = await pool.query(
       `SELECT e.id_evento,
-              c.nombre || ' ' || c.apellido AS nombre_cliente,
+              CONCAT_WS(' ', c.nombre, NULLIF(c.apellido, '-')) AS nombre_cliente,
               te.nombre AS nombre_tipo_evento,
               e.fecha_evento_confirmada,
               e.fecha_evento_confirmada - CURRENT_DATE AS dias_restantes,
@@ -161,7 +161,7 @@ export const obtenerServiciosSinConfirmar = async (req, res) => {
   try {
     const resultado = await pool.query(
       `SELECT sxe.id_servicio_x_evento, sxe.id_evento,
-              c.nombre || ' ' || c.apellido AS nombre_cliente,
+              CONCAT_WS(' ', c.nombre, NULLIF(c.apellido, '-')) AS nombre_cliente,
               e.fecha_evento_confirmada,
               e.fecha_evento_confirmada - CURRENT_DATE AS dias_para_evento,
               sv.nombre AS nombre_servicio,

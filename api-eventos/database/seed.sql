@@ -56,7 +56,7 @@ INSERT INTO empleados_x_empresa (id_empleado, id_empresa, cargo, fecha_inicio) V
 -- Usuarios: un admin y uno comun por empresa
 -- -----------------------------------------------------------------------------
 -- Los dos usuarios de la empresa 1 estan vinculados a un empleado, para poder
--- probar "Mis tareas" (fase 7). Los demas van sin empleado a proposito.
+-- probar "Mis tareas" (fase 6). Los demas van sin empleado a proposito.
 INSERT INTO usuarios (id_usuario, nombre, email, password, rol, id_empresa, id_empleado) VALUES
 (1, 'Laura Gimenez', 'admin@eventosdelcentro.com',   '$2b$10$WufpnoOJvWfopKLXXB58Nu.eZ4L0iuAUQiF4DcfzYcLut0SFL6VYi', 'admin',   1, 1),
 (2, 'Martin Rios',   'usuario@eventosdelcentro.com', '$2b$10$WufpnoOJvWfopKLXXB58Nu.eZ4L0iuAUQiF4DcfzYcLut0SFL6VYi', 'usuario', 1, 2),
@@ -212,7 +212,7 @@ INSERT INTO tareas (id_tarea, id_evento, id_empleado_responsable, id_servicio_x_
  'pendiente', 'Coordinar con la novia los horarios de la ceremonia');
 
 -- La decoracion (servicio_x_evento 2) queda SIN tareas a proposito, para poder
--- probar el boton "Generar tareas" de la fase 7.
+-- probar el boton "Generar tareas" de la fase 6.
 
 -- =============================================================================
 -- EMPRESA 2 · unos pocos datos propios, para probar el aislamiento multitenant
@@ -237,6 +237,296 @@ INSERT INTO solicitudes (id_solicitud, id_empresa, id_cliente, id_tipo_evento,
                          sede_prevista, preferencias, estado) VALUES
 (3, 2, 4, 5, CURRENT_DATE - 2, CURRENT_DATE + 45, 40,
  'Salon Girasoles', 'Tematica de superheroes', 'pendiente');
+
+-- =============================================================================
+-- DATOS DE DEMO (fase 9)
+-- =============================================================================
+-- Completan el circuito para la presentacion: 6 eventos en total, en las dos
+-- empresas y en todos los estados, y solicitudes en todos sus estados. Todo
+-- respeta las reglas de negocio, igual que si se hubiera cargado desde la API:
+--   - importe_total de cada presupuesto = suma de su detalle (regla 2);
+--   - cada evento sale de un presupuesto aceptado y sus servicios son copia
+--     del detalle de ese presupuesto (regla 4);
+--   - ninguna tarea arranco sin la anterior completada (regla 5);
+--   - los proveedores de cada renglon ofrecen ese servicio.
+--
+-- Resumen:
+--   evento 1 · empresa 1 · en_preparacion (el set original de arriba)
+--   evento 2 · empresa 1 · confirmado     · en 10 dias, con una tarea vencida
+--   evento 3 · empresa 1 · realizado      · hace 15 dias, con feedback
+--   evento 4 · empresa 1 · cancelado      · con el motivo cargado
+--   evento 5 · empresa 2 · en_preparacion · en 6 dias, con una tarea vencida
+--   evento 6 · empresa 2 · confirmado     · en 20 dias, sin coordinador
+-- =============================================================================
+
+-- -----------------------------------------------------------------------------
+-- Empresa 1: clientes nuevos
+-- -----------------------------------------------------------------------------
+-- Para un cliente empresa, la razon social va en nombre y el apellido es '-'
+-- (lo dice el contrato).
+INSERT INTO clientes (id_cliente, id_empresa, nombre, apellido, dni_cuit, email, telefono, direccion) VALUES
+(5, 1, 'Grupo Andes SA', '-', '30-71555666-1', 'eventos@grupoandes.com', '351-4225566', 'Av. Hipolito Yrigoyen 300, Cordoba'),
+(6, 1, 'Colegio San Jose', '-', '30-60111222-9', 'secretaria@sanjose.edu.ar', '351-4336677', 'Duarte Quiros 1500, Cordoba'),
+(7, 1, 'Martina', 'Ruiz', '42111333', 'martina.ruiz@gmail.com', '351-6007788', NULL);
+
+-- -----------------------------------------------------------------------------
+-- Solicitud 4: presupuestada. Tiene un presupuesto PRESENTADO esperando la
+-- respuesta del cliente: sirve para mostrar en vivo "aceptar y confirmar".
+-- -----------------------------------------------------------------------------
+INSERT INTO solicitudes (id_solicitud, id_empresa, id_cliente, id_tipo_evento,
+                         fecha_solicitud, fecha_evento_prevista, cantidad_asistentes,
+                         sede_prevista, preferencias, estado) VALUES
+(4, 1, 3, 1, CURRENT_DATE - 12, CURRENT_DATE + 50, 90,
+ 'Salon Las Palmas', 'Vals con fuegos frios y mesa de dulces', 'presupuestada');
+
+INSERT INTO presupuestos (id_presupuesto, id_solicitud, numero_version, fecha_emision,
+                          validez_dias, observaciones, importe_total, estado) VALUES
+(3, 4, 1, CURRENT_DATE - 3, 15, 'Incluye mesa de dulces dentro del catering', 1400000.00, 'presentado');
+
+INSERT INTO detalle_presupuesto (id_detalle, id_presupuesto, id_servicio, id_proveedor,
+                                 descripcion, cantidad, costo_proveedor, importe_cliente) VALUES
+(8, 3, 1, 1, 'Cena y mesa de dulces para 90 personas', 90, 800000.00, 1100000.00),
+(9, 3, 2, 3, 'Ambientacion con flores y luces calidas',   1, 200000.00,  300000.00);
+-- Total: 1100000 + 300000 = 1400000
+
+-- -----------------------------------------------------------------------------
+-- Solicitud 5 -> evento 2: CONFIRMADO, en 10 dias
+-- -----------------------------------------------------------------------------
+INSERT INTO solicitudes (id_solicitud, id_empresa, id_cliente, id_tipo_evento,
+                         fecha_solicitud, fecha_evento_prevista, cantidad_asistentes,
+                         sede_prevista, preferencias, estado) VALUES
+(5, 1, 5, 4, CURRENT_DATE - 30, CURRENT_DATE + 10, 150,
+ 'Hotel Quinto Centenario', 'Cena de fin de ano con discurso del directorio', 'aceptada');
+
+INSERT INTO presupuestos (id_presupuesto, id_solicitud, numero_version, fecha_emision,
+                          validez_dias, observaciones, importe_total, estado) VALUES
+(4, 5, 1, CURRENT_DATE - 20, 10, NULL, 1700000.00, 'aceptado');
+
+INSERT INTO detalle_presupuesto (id_detalle, id_presupuesto, id_servicio, id_proveedor,
+                                 descripcion, cantidad, costo_proveedor, importe_cliente) VALUES
+(10, 4, 1, 1, 'Cena de fin de ano para 150 personas', 150, 1000000.00, 1350000.00),
+(11, 4, 3, 2, 'Sonido para discursos y musica funcional', 1, 250000.00,  350000.00);
+-- Total: 1350000 + 350000 = 1700000
+
+INSERT INTO eventos (id_evento, id_empresa, id_solicitud, id_presupuesto_aceptado,
+                     id_empleado_coordinador, fecha_evento_confirmada, sede_acordada,
+                     condiciones_acordadas, estado) VALUES
+(2, 1, 5, 4, 3, CURRENT_DATE + 10, 'Hotel Quinto Centenario',
+ 'Pago contra factura a 15 dias', 'confirmado');
+
+INSERT INTO servicios_x_evento (id_servicio_x_evento, id_evento, id_servicio, id_proveedor,
+                                descripcion, cantidad, costo_acordado_proveedor,
+                                importe_acordado_cliente, estado_proveedor,
+                                fecha_confirmacion_proveedor, observaciones) VALUES
+(5, 2, 1, 1, 'Cena de fin de ano para 150 personas',     150, 1000000.00, 1350000.00,
+ 'confirmada', CURRENT_DATE - 5, NULL),
+(6, 2, 3, 2, 'Sonido para discursos y musica funcional', 1,   250000.00,  350000.00,
+ 'solicitada', NULL, 'Esperando que confirmen el equipo inalambrico');
+
+-- Catering: el paso 3 quedo pendiente con la fecha de ayer -> vencida.
+-- El sonido (servicio_x_evento 6) todavia no tiene tareas generadas.
+INSERT INTO tareas (id_tarea, id_evento, id_empleado_responsable, id_servicio_x_evento,
+                    id_tipo_tarea, descripcion, fecha_prevista, fecha_finalizacion,
+                    estado_tarea) VALUES
+(14, 2, 3, 5, 1, 'Contactar al proveedor · Catering (Catering Dona Rosa)', CURRENT_DATE - 12, CURRENT_DATE - 12, 'completada'),
+(15, 2, 3, 5, 2, 'Confirmar asistencia · Catering (Catering Dona Rosa)',   CURRENT_DATE - 6,  CURRENT_DATE - 5,  'completada'),
+(16, 2, 3, 5, 3, 'Seguimiento previo · Catering (Catering Dona Rosa)',     CURRENT_DATE - 1,  NULL,              'pendiente'),
+(17, 2, 3, 5, 4, 'Cierre del servicio · Catering (Catering Dona Rosa)',    CURRENT_DATE + 11, NULL,              'pendiente');
+
+-- -----------------------------------------------------------------------------
+-- Solicitud 6 -> evento 3: REALIZADO hace 15 dias, con feedback.
+-- La version 1 la rechazo el cliente por precio; se acepto la version 2.
+-- -----------------------------------------------------------------------------
+INSERT INTO solicitudes (id_solicitud, id_empresa, id_cliente, id_tipo_evento,
+                         fecha_solicitud, fecha_evento_prevista, cantidad_asistentes,
+                         sede_prevista, preferencias, estado) VALUES
+(6, 1, 6, 3, CURRENT_DATE - 75, CURRENT_DATE - 15, 250,
+ 'Club Atletico Belgrano', 'Fiesta de egresados de 5to ano', 'aceptada');
+
+INSERT INTO presupuestos (id_presupuesto, id_solicitud, numero_version, fecha_emision,
+                          validez_dias, observaciones, importe_total, estado) VALUES
+(5, 6, 1, CURRENT_DATE - 60, 10, 'Primera propuesta', 2600000.00, 'rechazado'),
+(6, 6, 2, CURRENT_DATE - 50, 10, 'Se ajusta el menu para bajar el precio', 2350000.00, 'aceptado');
+
+INSERT INTO detalle_presupuesto (id_detalle, id_presupuesto, id_servicio, id_proveedor,
+                                 descripcion, cantidad, costo_proveedor, importe_cliente) VALUES
+(12, 5, 1, 1, 'Cena completa para 250 personas', 250, 1500000.00, 2000000.00),
+(13, 5, 5, 2, 'DJ y animacion por 6 horas',       1,  400000.00,  600000.00),
+(14, 6, 1, 1, 'Menu de pasos para 250 personas',  250, 1400000.00, 1800000.00),
+(15, 6, 5, 2, 'DJ y animacion por 6 horas',       1,  400000.00,  550000.00);
+-- Total v1: 2000000 + 600000 = 2600000 · Total v2: 1800000 + 550000 = 2350000
+
+INSERT INTO eventos (id_evento, id_empresa, id_solicitud, id_presupuesto_aceptado,
+                     id_empleado_coordinador, fecha_evento_confirmada, sede_acordada,
+                     condiciones_acordadas, estado, observaciones_cierre,
+                     feedback_cliente, fecha_cierre) VALUES
+(3, 1, 6, 6, 1, CURRENT_DATE - 15, 'Club Atletico Belgrano',
+ 'Sena del 50%. Saldo en dos cuotas.', 'realizado',
+ 'Todo segun lo previsto. El DJ extendio una hora a pedido de los chicos.',
+ 'Excelente organizacion, los chicos quedaron muy contentos.', CURRENT_DATE - 14);
+
+INSERT INTO servicios_x_evento (id_servicio_x_evento, id_evento, id_servicio, id_proveedor,
+                                descripcion, cantidad, costo_acordado_proveedor,
+                                importe_acordado_cliente, estado_proveedor,
+                                fecha_confirmacion_proveedor, observaciones) VALUES
+(7, 3, 1, 1, 'Menu de pasos para 250 personas', 250, 1400000.00, 1800000.00,
+ 'finalizada', CURRENT_DATE - 40, NULL),
+(8, 3, 5, 2, 'DJ y animacion por 6 horas',       1,  400000.00,  550000.00,
+ 'finalizada', CURRENT_DATE - 38, 'Cobro una hora extra aparte');
+
+-- Las 8 tareas completas: el evento ya paso
+INSERT INTO tareas (id_tarea, id_evento, id_empleado_responsable, id_servicio_x_evento,
+                    id_tipo_tarea, descripcion, fecha_prevista, fecha_finalizacion,
+                    estado_tarea) VALUES
+(18, 3, 1, 7, 1, 'Contactar al proveedor · Catering (Catering Dona Rosa)',         CURRENT_DATE - 48, CURRENT_DATE - 48, 'completada'),
+(19, 3, 1, 7, 2, 'Confirmar asistencia · Catering (Catering Dona Rosa)',           CURRENT_DATE - 40, CURRENT_DATE - 40, 'completada'),
+(20, 3, 1, 7, 3, 'Seguimiento previo · Catering (Catering Dona Rosa)',             CURRENT_DATE - 20, CURRENT_DATE - 19, 'completada'),
+(21, 3, 1, 7, 4, 'Cierre del servicio · Catering (Catering Dona Rosa)',            CURRENT_DATE - 14, CURRENT_DATE - 14, 'completada'),
+(22, 3, 2, 8, 1, 'Contactar al proveedor · Animacion y DJ (Luz y Sonido Cordoba)', CURRENT_DATE - 47, CURRENT_DATE - 47, 'completada'),
+(23, 3, 2, 8, 2, 'Confirmar asistencia · Animacion y DJ (Luz y Sonido Cordoba)',   CURRENT_DATE - 38, CURRENT_DATE - 38, 'completada'),
+(24, 3, 2, 8, 3, 'Seguimiento previo · Animacion y DJ (Luz y Sonido Cordoba)',     CURRENT_DATE - 18, CURRENT_DATE - 18, 'completada'),
+(25, 3, 2, 8, 4, 'Cierre del servicio · Animacion y DJ (Luz y Sonido Cordoba)',    CURRENT_DATE - 14, CURRENT_DATE - 13, 'completada');
+
+-- -----------------------------------------------------------------------------
+-- Solicitud 7 -> evento 4: CANCELADO. Al cancelar, la solicitud tambien pasa
+-- a 'cancelada' (fase 8). Tiene una tarea con fecha pasada sin completar, pero
+-- NO aparece en el tablero: los eventos cerrados quedan afuera del seguimiento.
+-- -----------------------------------------------------------------------------
+INSERT INTO solicitudes (id_solicitud, id_empresa, id_cliente, id_tipo_evento,
+                         fecha_solicitud, fecha_evento_prevista, cantidad_asistentes,
+                         sede_prevista, preferencias, estado) VALUES
+(7, 1, 7, 1, CURRENT_DATE - 35, CURRENT_DATE + 40, 100,
+ 'Salon Las Palmas', 'Tematica Paris', 'cancelada');
+
+INSERT INTO presupuestos (id_presupuesto, id_solicitud, numero_version, fecha_emision,
+                          validez_dias, observaciones, importe_total, estado) VALUES
+(7, 7, 1, CURRENT_DATE - 25, 15, NULL, 480000.00, 'aceptado');
+
+INSERT INTO detalle_presupuesto (id_detalle, id_presupuesto, id_servicio, id_proveedor,
+                                 descripcion, cantidad, costo_proveedor, importe_cliente) VALUES
+(16, 7, 4, 4, 'Fotografia de la fiesta y book previo', 1, 350000.00, 480000.00);
+
+INSERT INTO eventos (id_evento, id_empresa, id_solicitud, id_presupuesto_aceptado,
+                     id_empleado_coordinador, fecha_evento_confirmada, sede_acordada,
+                     condiciones_acordadas, estado, observaciones_cierre, fecha_cierre) VALUES
+(4, 1, 7, 7, 2, CURRENT_DATE + 40, 'Salon Las Palmas', 'Sena del 30%', 'cancelado',
+ 'La familia cancelo por un viaje al exterior. Se devolvio la sena.', CURRENT_DATE - 2);
+
+INSERT INTO servicios_x_evento (id_servicio_x_evento, id_evento, id_servicio, id_proveedor,
+                                descripcion, cantidad, costo_acordado_proveedor,
+                                importe_acordado_cliente, estado_proveedor,
+                                fecha_confirmacion_proveedor, observaciones) VALUES
+(9, 4, 4, 4, 'Fotografia de la fiesta y book previo', 1, 350000.00, 480000.00,
+ 'solicitada', NULL, NULL);
+
+INSERT INTO tareas (id_tarea, id_evento, id_empleado_responsable, id_servicio_x_evento,
+                    id_tipo_tarea, descripcion, fecha_prevista, fecha_finalizacion,
+                    estado_tarea) VALUES
+(26, 4, 2, 9, 1, 'Contactar al proveedor · Fotografia y video (Estudio Clic)', CURRENT_DATE - 20, CURRENT_DATE - 20, 'completada'),
+(27, 4, 2, 9, 2, 'Confirmar asistencia · Fotografia y video (Estudio Clic)',   CURRENT_DATE - 5,  NULL,              'pendiente'),
+(28, 4, 2, 9, 3, 'Seguimiento previo · Fotografia y video (Estudio Clic)',     CURRENT_DATE + 30, NULL,              'pendiente'),
+(29, 4, 2, 9, 4, 'Cierre del servicio · Fotografia y video (Estudio Clic)',    CURRENT_DATE + 41, NULL,              'pendiente');
+
+-- -----------------------------------------------------------------------------
+-- Solicitud 8: RECHAZADA. El cliente no siguio despues de la primera version.
+-- -----------------------------------------------------------------------------
+INSERT INTO solicitudes (id_solicitud, id_empresa, id_cliente, id_tipo_evento,
+                         fecha_solicitud, fecha_evento_prevista, cantidad_asistentes,
+                         sede_prevista, preferencias, estado) VALUES
+(8, 1, 5, 4, CURRENT_DATE - 18, CURRENT_DATE + 90, 60,
+ NULL, 'Lanzamiento de producto con coctel', 'rechazada');
+
+INSERT INTO presupuestos (id_presupuesto, id_solicitud, numero_version, fecha_emision,
+                          validez_dias, observaciones, importe_total, estado) VALUES
+(8, 8, 1, CURRENT_DATE - 10, 10, NULL, 850000.00, 'rechazado');
+
+INSERT INTO detalle_presupuesto (id_detalle, id_presupuesto, id_servicio, id_proveedor,
+                                 descripcion, cantidad, costo_proveedor, importe_cliente) VALUES
+(17, 8, 1, 1, 'Coctel para 60 personas', 60, 600000.00, 850000.00);
+
+-- -----------------------------------------------------------------------------
+-- Empresa 2: un empleado, un servicio y una clienta mas, y dos eventos
+-- -----------------------------------------------------------------------------
+INSERT INTO empleados (id_empleado, legajo, nombre, apellido, rol, email, telefono) VALUES
+(6, 'E102', 'Ramiro', 'Ortiz', 'Asistente', 'ramiro.ortiz@fiestasnorte.com', '351-5220022');
+
+INSERT INTO empleados_x_empresa (id_empleado, id_empresa, cargo, fecha_inicio) VALUES
+(6, 2, 'Asistente', CURRENT_DATE - 150);
+
+-- Sin proveedor que lo ofrezca: lo hace el personal propio
+INSERT INTO servicios (id_servicio, id_empresa, nombre, descripcion) VALUES
+(7, 2, 'Animacion infantil', 'Juegos, pelotero y show de magia');
+
+INSERT INTO clientes (id_cliente, id_empresa, nombre, apellido, dni_cuit, email, telefono) VALUES
+(8, 2, 'Paula', 'Sanchez', '36777888', 'paula.sanchez@gmail.com', '351-6558899');
+
+-- Solicitud 9 -> evento 5: EN PREPARACION, en 6 dias, con una tarea vencida y
+-- un servicio sin proveedor (la animacion la hace el personal propio)
+INSERT INTO solicitudes (id_solicitud, id_empresa, id_cliente, id_tipo_evento,
+                         fecha_solicitud, fecha_evento_prevista, cantidad_asistentes,
+                         sede_prevista, preferencias, estado) VALUES
+(9, 2, 8, 5, CURRENT_DATE - 25, CURRENT_DATE + 6, 35,
+ 'Salon Pequenos Gigantes', 'Cumple de 5 anos, tematica dinosaurios', 'aceptada');
+
+INSERT INTO presupuestos (id_presupuesto, id_solicitud, numero_version, fecha_emision,
+                          validez_dias, observaciones, importe_total, estado) VALUES
+(9, 9, 1, CURRENT_DATE - 15, 7, NULL, 410000.00, 'aceptado');
+
+INSERT INTO detalle_presupuesto (id_detalle, id_presupuesto, id_servicio, id_proveedor,
+                                 descripcion, cantidad, costo_proveedor, importe_cliente) VALUES
+(18, 9, 6, 5,    'Mesa dulce y comida para 35 chicos', 35, 180000.00, 260000.00),
+(19, 9, 7, NULL, 'Animacion de 3 horas',                1,       0.00, 150000.00);
+-- Total: 260000 + 150000 = 410000
+
+INSERT INTO eventos (id_evento, id_empresa, id_solicitud, id_presupuesto_aceptado,
+                     id_empleado_coordinador, fecha_evento_confirmada, sede_acordada,
+                     condiciones_acordadas, estado) VALUES
+(5, 2, 9, 9, 5, CURRENT_DATE + 6, 'Salon Pequenos Gigantes', 'Pago total por adelantado', 'en_preparacion');
+
+INSERT INTO servicios_x_evento (id_servicio_x_evento, id_evento, id_servicio, id_proveedor,
+                                descripcion, cantidad, costo_acordado_proveedor,
+                                importe_acordado_cliente, estado_proveedor,
+                                fecha_confirmacion_proveedor, observaciones) VALUES
+(10, 5, 6, 5,    'Mesa dulce y comida para 35 chicos', 35, 180000.00, 260000.00,
+ 'confirmada', CURRENT_DATE - 8, NULL),
+(11, 5, 7, NULL, 'Animacion de 3 horas',                1,       0.00, 150000.00,
+ 'solicitada', NULL, 'La hace el personal propio');
+
+INSERT INTO tareas (id_tarea, id_evento, id_empleado_responsable, id_servicio_x_evento,
+                    id_tipo_tarea, descripcion, fecha_prevista, fecha_finalizacion,
+                    estado_tarea, observaciones) VALUES
+(30, 5, 6, 10, 1, 'Contactar al proveedor · Catering infantil (Banquetes del Norte)', CURRENT_DATE - 12, CURRENT_DATE - 12, 'completada', NULL),
+(31, 5, 6, 10, 2, 'Confirmar asistencia · Catering infantil (Banquetes del Norte)',   CURRENT_DATE - 8,  CURRENT_DATE - 8,  'completada', NULL),
+(32, 5, 6, 10, 3, 'Seguimiento previo · Catering infantil (Banquetes del Norte)',     CURRENT_DATE - 2,  NULL,              'pendiente',  NULL),
+(33, 5, 6, 10, 4, 'Cierre del servicio · Catering infantil (Banquetes del Norte)',    CURRENT_DATE + 7,  NULL,              'pendiente',  NULL),
+(34, 5, 5, NULL, NULL, 'Comprar los souvenirs',                                        CURRENT_DATE + 3,  NULL,              'pendiente',  'Dinosaurios de goma, 35 unidades');
+
+-- Solicitud 10 -> evento 6: CONFIRMADO, en 20 dias, todavia sin coordinador
+INSERT INTO solicitudes (id_solicitud, id_empresa, id_cliente, id_tipo_evento,
+                         fecha_solicitud, fecha_evento_prevista, cantidad_asistentes,
+                         sede_prevista, preferencias, estado) VALUES
+(10, 2, 4, 5, CURRENT_DATE - 9, CURRENT_DATE + 20, 50,
+ 'Salon Girasoles', 'Cumple de 8 anos', 'aceptada');
+
+INSERT INTO presupuestos (id_presupuesto, id_solicitud, numero_version, fecha_emision,
+                          validez_dias, observaciones, importe_total, estado) VALUES
+(10, 10, 1, CURRENT_DATE - 7, 7, NULL, 300000.00, 'aceptado');
+
+INSERT INTO detalle_presupuesto (id_detalle, id_presupuesto, id_servicio, id_proveedor,
+                                 descripcion, cantidad, costo_proveedor, importe_cliente) VALUES
+(20, 10, 6, 5, 'Mesa dulce y comida para 50 chicos', 50, 200000.00, 300000.00);
+
+INSERT INTO eventos (id_evento, id_empresa, id_solicitud, id_presupuesto_aceptado,
+                     id_empleado_coordinador, fecha_evento_confirmada, sede_acordada,
+                     condiciones_acordadas, estado) VALUES
+(6, 2, 10, 10, NULL, CURRENT_DATE + 20, 'Salon Girasoles', NULL, 'confirmado');
+
+INSERT INTO servicios_x_evento (id_servicio_x_evento, id_evento, id_servicio, id_proveedor,
+                                descripcion, cantidad, costo_acordado_proveedor,
+                                importe_acordado_cliente, estado_proveedor,
+                                fecha_confirmacion_proveedor, observaciones) VALUES
+(12, 6, 6, 5, 'Mesa dulce y comida para 50 chicos', 50, 200000.00, 300000.00,
+ 'solicitada', NULL, NULL);
 
 -- =============================================================================
 -- Reacomodar las secuencias

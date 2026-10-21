@@ -2,9 +2,19 @@
 // antes de mandar el dato a la base: si no, un "abc" donde va un numero hace
 // fallar el cast de PostgreSQL y terminaria en un 500 en vez de un 400.
 
-// Un id valido es un entero positivo
+// El maximo de una columna INTEGER/SERIAL de PostgreSQL. Un id mas grande no
+// puede existir, y mandarlo a la base haria fallar la consulta (error 22003).
+const MAXIMO_INTEGER = 2147483647;
+
+// Un id valido es un entero positivo que entra en un INTEGER. Se usa para los
+// ids del body, de los filtros y de la URL (ver validarParamId).
 export const esIdValido = (valor) =>
-  Number.isInteger(Number(valor)) && Number(valor) > 0;
+  valor !== "" &&
+  valor !== null &&
+  typeof valor !== "boolean" &&
+  Number.isInteger(Number(valor)) &&
+  Number(valor) > 0 &&
+  Number(valor) <= MAXIMO_INTEGER;
 
 // Entero mayor a 0 (cantidades, dias de validez). Acepta tambien el numero
 // como string ("80"), que es como llega si el front lo manda desde un input.

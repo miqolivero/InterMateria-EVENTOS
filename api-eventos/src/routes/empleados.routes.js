@@ -7,8 +7,12 @@ import {
   editarEmpleado,
   cambiarActivoEmpleado
 } from "../controllers/empleados.controller.js";
+import { validarParamId } from "../middlewares/validarId.middleware.js";
 
 const router = Router();
+
+// Un :id con formato invalido es un registro que no existe: 404
+router.param("id", validarParamId("Empleado no encontrado"));
 
 router.use(verificarToken);
 

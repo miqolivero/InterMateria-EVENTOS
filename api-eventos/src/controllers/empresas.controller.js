@@ -9,7 +9,7 @@ export const obtenerEmpresas = async (req, res) => {
     );
     res.json(resultado.rows);
   } catch (error) {
-    res.status(500).json({ mensaje: "Error al obtener las empresas" });
+    responderError(res, error);
   }
 };
 
@@ -29,7 +29,7 @@ export const obtenerEmpresaPorId = async (req, res) => {
 
     res.json(resultado.rows[0]);
   } catch (error) {
-    res.status(500).json({ mensaje: "Error al obtener la empresa" });
+    responderError(res, error);
   }
 };
 
@@ -53,13 +53,9 @@ export const crearEmpresa = async (req, res) => {
 
     res.status(201).json(resultado.rows[0]);
   } catch (error) {
-    // 23505 = violacion de UNIQUE (el cuit ya existe)
-    if (error.code === "23505") {
-      return res
-        .status(400)
-        .json({ mensaje: "Ya existe una empresa con ese cuit" });
-    }
-    res.status(500).json({ mensaje: "Error al crear la empresa" });
+    // 23505 = violacion de UNIQUE (el cuit ya existe) -> 400. Cualquier otro
+    // error sale como el 500 generico del contrato.
+    responderError(res, error, { duplicado: "Ya existe una empresa con ese cuit" });
   }
 };
 
@@ -102,12 +98,7 @@ export const editarEmpresa = async (req, res) => {
 
     res.json(resultado.rows[0]);
   } catch (error) {
-    if (error.code === "23505") {
-      return res
-        .status(400)
-        .json({ mensaje: "Ya existe una empresa con ese cuit" });
-    }
-    res.status(500).json({ mensaje: "Error al editar la empresa" });
+    responderError(res, error, { duplicado: "Ya existe una empresa con ese cuit" });
   }
 };
 

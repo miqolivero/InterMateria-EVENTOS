@@ -1,6 +1,7 @@
 import pool from "../data/db.js";
 import { responderError } from "../utils/errores.js";
 import { construirFiltros } from "../utils/consultas.js";
+import { esIdValido } from "../utils/validaciones.js";
 
 // Proveedores: quien presta los servicios. Lo distinto de este recurso es que
 // cada proveedor trae la lista de servicios que OFRECE (proveedores_x_servicio),
@@ -45,8 +46,9 @@ export const obtenerProveedores = async (req, res) => {
   const valoresBase = [req.usuario.id_empresa];
 
   // Filtro extra del contrato: solo los proveedores que ofrecen ese servicio.
-  // Va con EXISTS y no con un JOIN para no duplicar filas.
-  if (req.query.id_servicio) {
+  // Va con EXISTS y no con un JOIN para no duplicar filas. Un id con formato
+  // invalido se ignora, como los demas filtros de la API.
+  if (esIdValido(req.query.id_servicio)) {
     valoresBase.push(req.query.id_servicio);
     condicionesBase.push(
       `EXISTS (SELECT 1 FROM proveedores_x_servicio pxs

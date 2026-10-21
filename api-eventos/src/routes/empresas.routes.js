@@ -10,8 +10,12 @@ import {
   editarEmpresa,
   eliminarEmpresa
 } from "../controllers/empresas.controller.js";
+import { validarParamId } from "../middlewares/validarId.middleware.js";
 
 const router = Router();
+
+// Un :id con formato invalido es un registro que no existe: 404
+router.param("id", validarParamId("Empresa no encontrada"));
 
 // Publicas: el listado lo usa la pantalla de registro para elegir la empresa,
 // cuando todavia no hay token.

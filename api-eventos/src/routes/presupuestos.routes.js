@@ -11,8 +11,13 @@ import {
   rechazarPresupuesto
 } from "../controllers/presupuestos.controller.js";
 import { aceptarPresupuesto } from "../controllers/eventos.controller.js";
+import { validarParamId } from "../middlewares/validarId.middleware.js";
 
 const router = Router();
+
+// Un :id con formato invalido es un registro que no existe: 404
+router.param("id", validarParamId("Presupuesto no encontrado"));
+router.param("idDetalle", validarParamId("Renglon no encontrado"));
 
 // Todas las rutas piden token: la empresa del token es la que se compara con
 // la de la solicitud del presupuesto.

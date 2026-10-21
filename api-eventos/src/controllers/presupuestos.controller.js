@@ -4,7 +4,8 @@ import { existeEnEmpresa } from "../utils/consultas.js";
 import {
   esIdValido,
   esEnteroPositivo,
-  esImporteValido
+  esImporteValido,
+  esVacio
 } from "../utils/validaciones.js";
 
 // Presupuestos: las versiones de la propuesta que se le hace al cliente.
@@ -48,9 +49,6 @@ const solicitudCerrada = (estado) =>
 // el cliente. Cancelada, rechazada o aceptada ya no admite propuestas nuevas.
 const ESTADOS_SOLICITUD_ABIERTA = ["pendiente", "presupuestada"];
 
-// Vacio = no vino. Se usa para los campos opcionales: 0 es un valor valido.
-const vacio = (valor) => valor === undefined || valor === null || valor === "";
-
 // El objeto Presupuesto completo de docs/API.md, en una sola consulta. Lo
 // devuelven todos los endpoints del recurso, asi el front siempre recibe los
 // totales actualizados.
@@ -71,7 +69,7 @@ const SELECT_PRESUPUESTO = `
          p.estado = 'borrador' AS editable,
          json_build_object(
            'id_solicitud', s.id_solicitud,
-           'nombre_cliente', c.nombre || ' ' || c.apellido,
+           'nombre_cliente', CONCAT_WS(' ', c.nombre, NULLIF(c.apellido, '-')),
            'nombre_tipo_evento', te.nombre,
            'fecha_evento_prevista', s.fecha_evento_prevista,
            'cantidad_asistentes', s.cantidad_asistentes,
@@ -172,7 +170,7 @@ const estadoPresupuesto = async (idPresupuesto, idEmpresa) => {
 
 // validez_dias es opcional, pero si viene tiene que ser un entero mayor a 0
 const validezInvalida = (validezDias) =>
-  !vacio(validezDias) && !esEnteroPositivo(validezDias);
+  !esVacio(validezDias) && !esEnteroPositivo(validezDias);
 
 // ---------------------------------------------------------------------------
 // Validaciones de un renglon del detalle
@@ -183,19 +181,19 @@ const validezInvalida = (validezDias) =>
 const validarFormatoRenglon = (body) => {
   const { id_servicio, cantidad, costo_proveedor, importe_cliente } = body;
 
-  if (vacio(id_servicio) || vacio(importe_cliente)) {
+  if (esVacio(id_servicio) || esVacio(importe_cliente)) {
     return MENSAJES.obligatoriosDetalle;
   }
 
   // costo_proveedor es opcional (por defecto 0), pero si viene se valida igual
   if (
     !esImporteValido(importe_cliente) ||
-    (!vacio(costo_proveedor) && !esImporteValido(costo_proveedor))
+    (!esVacio(costo_proveedor) && !esImporteValido(costo_proveedor))
   ) {
     return MENSAJES.importesNegativos;
   }
 
-  if (!vacio(cantidad) && !esEnteroPositivo(cantidad)) {
+  if (!esVacio(cantidad) && !esEnteroPositivo(cantidad)) {
     return MENSAJES.cantidadInvalida;
   }
 
@@ -218,7 +216,7 @@ const validarRenglonEnEmpresa = async (client, body, idEmpresa) => {
     return MENSAJES.servicioInvalido;
   }
 
-  if (vacio(id_proveedor)) {
+  if (esVacio(id_proveedor)) {
     return null;
   }
 
@@ -243,10 +241,10 @@ const validarRenglonEnEmpresa = async (client, body, idEmpresa) => {
 // contrato: cantidad 1 y costo 0.
 const valoresRenglon = (body) => [
   body.id_servicio,
-  vacio(body.id_proveedor) ? null : body.id_proveedor,
+  esVacio(body.id_proveedor) ? null : body.id_proveedor,
   body.descripcion ?? null,
-  vacio(body.cantidad) ? 1 : body.cantidad,
-  vacio(body.costo_proveedor) ? 0 : body.costo_proveedor,
+  esVacio(body.cantidad) ? 1 : body.cantidad,
+  esVacio(body.costo_proveedor) ? 0 : body.costo_proveedor,
   body.importe_cliente
 ];
 
@@ -308,7 +306,7 @@ export const crearPresupuesto = async (req, res) => {
       `INSERT INTO presupuestos (id_solicitud, validez_dias, observaciones)
        VALUES ($1, $2, $3)
        RETURNING id_presupuesto`,
-      [req.params.id, vacio(validez_dias) ? null : validez_dias, observaciones ?? null]
+      [req.params.id, esVacio(validez_dias) ? null : validez_dias, observaciones ?? null]
     );
 
     const presupuesto = await buscarPresupuesto(
@@ -368,7 +366,7 @@ export const editarPresupuesto = async (req, res) => {
          AND p.estado = 'borrador'
        RETURNING p.id_presupuesto`,
       [
-        vacio(validez_dias) ? null : validez_dias,
+        esVacio(validez_dias) ? null : validez_dias,
         observaciones ?? null,
         req.params.id,
         idEmpresa

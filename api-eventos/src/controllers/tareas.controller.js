@@ -74,7 +74,7 @@ export const SELECT_TAREA = selectTarea();
 // Los tres datos del evento que agregan "mis tareas" y las tareas vencidas del
 // tablero, para que la persona sepa de que evento es cada tarea sin abrirlo.
 export const COLUMNAS_EVENTO_DE_TAREA = `,
-  c.nombre || ' ' || c.apellido AS nombre_cliente,
+  CONCAT_WS(' ', c.nombre, NULLIF(c.apellido, '-')) AS nombre_cliente,
   te.nombre AS nombre_tipo_evento,
   e.fecha_evento_confirmada`;
 

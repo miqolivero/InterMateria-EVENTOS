@@ -32,13 +32,16 @@ const ESTADOS_ABIERTOS = ["pendiente", "presupuestada"];
 // una sola vez para que el listado, el POST, el PUT y el PATCH devuelvan
 // exactamente los mismos campos.
 //
-// - nombre_cliente se arma en el SQL concatenando nombre y apellido.
+// - nombre_cliente se arma en el SQL concatenando nombre y apellido. Para un
+//   cliente empresa el apellido es '-' (lo dice el contrato): NULLIF lo
+//   convierte en null y CONCAT_WS lo saltea, asi sale "Grupo Andes SA" y no
+//   "Grupo Andes SA -". Lo mismo en eventos, presupuestos, tareas y tablero.
 // - id_evento sale de un LEFT JOIN: si la solicitud todavia no tiene evento,
 //   el JOIN no encuentra fila y queda en null (con un JOIN comun la solicitud
 //   desapareceria del listado).
 const COLUMNAS = `
   s.id_solicitud, s.id_cliente,
-  c.nombre || ' ' || c.apellido AS nombre_cliente,
+  CONCAT_WS(' ', c.nombre, NULLIF(c.apellido, '-')) AS nombre_cliente,
   s.id_tipo_evento, te.nombre AS nombre_tipo_evento,
   s.fecha_solicitud, s.fecha_evento_prevista, s.cantidad_asistentes,
   s.sede_prevista, s.preferencias, s.estado,
@@ -151,7 +154,7 @@ export const obtenerSolicitudes = async (req, res) => {
   if (hasta && esFechaValida(hasta)) agregar("s.fecha_evento_prevista <= ?", hasta);
 
   // Busca sobre el nombre completo, asi "lucia fern" encuentra a Lucia Fernandez
-  if (buscar) agregar("(c.nombre || ' ' || c.apellido) ILIKE ?", `%${buscar}%`);
+  if (buscar) agregar("(CONCAT_WS(' ', c.nombre, NULLIF(c.apellido, '-'))) ILIKE ?", `%${buscar}%`);
 
   try {
     const resultado = await pool.query(

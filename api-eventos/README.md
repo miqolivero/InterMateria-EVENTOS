@@ -30,14 +30,32 @@ psql -U postgres -d eventos -f database/seed.sql
   `UNIQUE`, los `CHECK` de cada estado y los índices. **Arranca borrando todas
   las tablas del sistema**, así que se puede volver a correr las veces que haga
   falta, pero nunca sobre datos que no se quieran perder.
-- **`seed.sql`** carga los datos de prueba: las 3 empresas, los 4 tipos de tarea
-  y los usuarios. Para la empresa 1 arma un circuito completo (clientes,
-  catálogos, proveedores, una solicitud pendiente, otra aceptada con 2 versiones
-  de presupuesto y su evento en preparación con servicios y tareas). La empresa 2
-  tiene unos pocos datos propios, para poder probar el aislamiento entre empresas.
+- **`seed.sql`** carga los datos de prueba y de demo: las 3 empresas, los 4 tipos
+  de tarea, los usuarios y un circuito completo en las empresas 1 y 2 (ver
+  abajo). La empresa 3 queda vacía, para mostrar el sistema "de cero".
 
-Las fechas del seed son relativas a `CURRENT_DATE`, así siempre hay un evento
-próximo y una tarea vencida sin tener que editar el script cada semana.
+Las fechas del seed son relativas a `CURRENT_DATE`, así siempre hay eventos
+próximos y tareas vencidas sin tener que editar el script cada semana.
+
+### Datos de demo
+
+Todos respetan las reglas de negocio, como si se hubieran cargado desde la API:
+los totales coinciden con el detalle, cada evento sale de un presupuesto
+aceptado y ninguna tarea se saltó un paso de la secuencia.
+
+| Evento | Empresa | Estado | Cuándo | Para mostrar |
+| --- | --- | --- | --- | --- |
+| 1 · Juan Perez | 1 | en preparación | en 25 días | tarea vencida, tarea ≠ proveedor (fotografía), un servicio sin tareas para "Generar tareas" |
+| 2 · Grupo Andes SA | 1 | confirmado | en 10 días | tarea vencida, un servicio sin confirmar |
+| 3 · Colegio San Jose | 1 | realizado | hace 15 días | feedback cargado; la versión 1 del presupuesto fue rechazada |
+| 4 · Martina Ruiz | 1 | cancelado | — | motivo de la cancelación; no aparece en el tablero |
+| 5 · Paula Sanchez | 2 | en preparación | en 6 días | tarea vencida, un servicio sin proveedor |
+| 6 · Hernan Diaz | 2 | confirmado | en 20 días | sin coordinador |
+
+Solicitudes en todos los estados: la **4** está `presupuestada`, con un
+presupuesto **presentado** listo para aceptar en vivo; la **1** y la **3** están
+`pendiente` (sin presupuesto); la **8** fue `rechazada`; la **7** se canceló
+junto con su evento.
 
 **Para recrear la base de cero** en cualquier momento alcanza con volver a correr
 los dos scripts, sin el `CREATE DATABASE`.
@@ -254,8 +272,8 @@ rutas piden token.
   `fecha_cierre` = hoy. Cancelar exige el motivo (`observaciones_cierre`) y pasa
   la solicitud a `cancelada` en la misma transacción. No se exige que las
   tareas estén completas: el front avisa y decide el usuario.
-- **Feedback.** Es la única edición posible con el evento cerrado, y solo si se
-  `realizado`. Es parcial: se actualiza solo lo que viene con texto.
+- **Feedback.** Es la única edición posible con el evento cerrado, y solo si el
+  evento está `realizado`. Es parcial: se actualiza solo lo que viene con texto.
 - En los servicios del evento, `tareas_generadas` y `paso_actual` (el orden de la
   primera tarea de la secuencia sin completar) se calculan en el SQL.
 - Las secuencias de PostgreSQL no vuelven atrás con un `ROLLBACK`: si una
@@ -321,12 +339,20 @@ lectura, siempre sobre los eventos **abiertos** de la empresa.
 El contrato completo, con el JSON de cada respuesta y los mensajes de error
 exactos, está en `docs/API.md`.
 
-### Códigos de autenticación
+### Códigos de error
 
-| Código | Significado | Cuándo |
-| --- | --- | --- |
-| 401 | No autenticado | No hay token, la firma no coincide o venció |
-| 403 | No autorizado | El token es válido pero el rol no alcanza |
+| Código | Cuándo |
+| --- | --- |
+| 400 | Faltan datos o son inválidos, un id de otra empresa en el body, duplicados, JSON roto |
+| 401 | No hay token, la firma no coincide o venció |
+| 403 | El token es válido pero el rol no alcanza |
+| 404 | El `:id` no existe, es de otra empresa o no es un entero válido (`/clientes/abc`) |
+| 409 | La acción choca con el estado actual, o el registro tiene datos asociados |
+| 500 | Error nuestro: siempre `"Error interno del servidor"`, sin detalles de la base |
+
+Ningún dato mal formado llega a la base como 500: un `router.param` valida los
+`:id` de la URL, los controladores validan los formatos del body y, como red de
+seguridad, `errores.js` traduce a 400 los errores de formato de PostgreSQL.
 
 ## Usuarios
 
@@ -350,7 +376,7 @@ Los carga `seed.sql`. **La contraseña de todos es `admin123`.**
 | `admin@produccionessur.com` | admin | 3 · Producciones Sur | — |
 | `usuario@produccionessur.com` | usuario | 3 · Producciones Sur | — |
 
-La empresa 1 es la que tiene todos los datos cargados: es la que conviene usar
+La empresa 1 es la que tiene más datos cargados: es la que conviene usar
 para la demo. Para probar el aislamiento entre empresas, entrar con un usuario de
 la empresa 2 e intentar acceder a un registro de la 1.
 
@@ -360,7 +386,7 @@ la empresa 2 e intentar acceder a un registro de la 1.
 api-eventos/
 ├── database/
 │   ├── schema.sql                  las 16 tablas del modelo (DDL)
-│   └── seed.sql                    datos de prueba
+│   └── seed.sql                    datos de prueba y de demo
 ├── src/
 │   ├── index.js                    crea el servidor y monta las rutas
 │   ├── routes/                     una ruta por recurso
@@ -392,7 +418,8 @@ api-eventos/
 │   │   ├── tareas.controller.js    secuencia, vencida y mis tareas
 │   │   └── seguimiento.controller.js  consultas agregadas del tablero
 │   ├── middlewares/
-│   │   └── auth.middleware.js      verificarToken, verificarRol
+│   │   ├── auth.middleware.js      verificarToken, verificarRol
+│   │   └── validarId.middleware.js valida los :id de la URL (404 si no son enteros)
 │   ├── utils/                      lo que comparten los controladores
 │   │   ├── errores.js              traduce los errores de pg a HTTP
 │   │   ├── consultas.js            filtros, chequeo por empresa y empleado activo
@@ -409,10 +436,19 @@ montarlo en `index.js`.
 Lo que se repetía en los cinco recursos vive en `src/utils/`:
 
 - **`errores.js`** traduce los códigos de PostgreSQL al HTTP que corresponde
-  (`23505` duplicado → 400, `23503` datos asociados → 409, resto → 500). Sin
-  esto el mismo `try/catch` estaría escrito 25 veces.
+  (`23505` duplicado → 400, `23503` datos asociados → 409, errores de formato
+  `22P02`/`22003`/`22007`/`22008` → 400, resto → 500). Sin esto el mismo
+  `try/catch` estaría escrito en cada endpoint.
 - **`consultas.js`** arma el `WHERE` de `?activo` y `?buscar` siempre
-  parametrizado, y verifica que un id de otra tabla sea de la misma empresa.
+  parametrizado, verifica que un id de otra tabla sea de la misma empresa y que
+  un empleado trabaje hoy en ella.
+- **`validaciones.js`** valida formatos antes de ir a la base: ids (enteros que
+  entran en un `INTEGER`), fechas `YYYY-MM-DD` que existen, importes y
+  cantidades.
+
+Las decisiones de diseño (multitenant, versiones, costo vs. importe, secuencia
+de tareas, "vencida" calculada, baja lógica, transacciones) están explicadas en
+`docs/DECISIONES.md`.
 
 `db.js` además configura dos parsers de `pg`: las fechas (`DATE`) se devuelven
 como texto para que no se corran de zona horaria, y los montos (`NUMERIC`) como

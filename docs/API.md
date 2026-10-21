@@ -34,10 +34,18 @@ cambia, se actualiza este archivo **y se avisa** antes de mergear.
 
 Estos errores aplican a todos los endpoints y **no se repiten** en cada uno:
 
-- `401` en las rutas protegidas.
-- `404 · "<Recurso> no encontrado"` cuando el `:id` de la URL no existe o es de
-  otra empresa.
-- `500`.
+- `401` en las rutas protegidas: `"Token no proporcionado"`, `"Token invalido"`
+  o `"El token expiro"`.
+- `404 · "<Recurso> no encontrado"` cuando el `:id` de la URL no existe, es de
+  otra empresa **o no es un entero válido** (`/clientes/abc`).
+- `400 · "Hay datos con un formato invalido"`: red de seguridad para un dato que
+  la base no puede convertir a su tipo (un texto donde va un número o un
+  booleano, una fecha imposible, un número que no entra en la columna).
+- `400 · "El cuerpo del pedido no es un JSON valido"`.
+- `404 · "Ruta no encontrada"` para una ruta que no existe.
+- `500 · "Error interno del servidor"`, siempre con ese texto.
+- Un filtro de listado con formato inválido (`?desde=hola`, `?id_cliente=abc`)
+  se ignora: no da error.
 
 > **Nota para el back:** `pg` devuelve los `DATE` como objeto `Date` (que al
 > pasar a JSON se corre de zona horaria) y los `DECIMAL` como string. En
@@ -212,8 +220,14 @@ Las cinco entidades siguen **el mismo patrón**:
 - Sin `?activo`, el listado devuelve todos. `?buscar` busca sin distinguir
   mayúsculas en los campos que se indican en cada recurso.
 - No hay `DELETE`: la baja es lógica.
-- Errores comunes: 400 por campos obligatorios (`"El <campo> es obligatorio"`)
-  y 400 por duplicados.
+- Errores comunes: 400 por campos obligatorios y 400 por duplicados. Los
+  mensajes exactos de obligatorios son:
+  - clientes: `"El nombre y el apellido son obligatorios"`
+  - tipos de evento y servicios: `"El nombre es obligatorio"`
+  - proveedores: `"La razon social es obligatoria"`
+  - empleados: `"El legajo, el nombre y el apellido son obligatorios"`
+- `PATCH /:id/activo` con un valor que no es booleano: 400 ·
+  `"El campo activo tiene que ser true o false"`.
 
 ## Clientes · `/api/clientes`
 
@@ -292,6 +306,7 @@ presupuesto para el `Select` de proveedor.
 ```
 
 - Obligatorio: `razon_social`.
+- 400 · `"Ya existe un proveedor con ese CUIT"`
 - `servicios` es de solo lectura en POST y PUT. Se modifica con el endpoint de abajo.
 
 ### GET /proveedores/:id/servicios
@@ -374,8 +389,9 @@ Objeto **Solicitud** (como aparece en el listado):
 }
 ```
 
-`nombre_cliente` es nombre y apellido concatenados. `id_evento` vale `null`
-mientras no haya evento.
+`nombre_cliente` es nombre y apellido concatenados. Para un cliente empresa (con
+apellido `-`) el guion no se agrega: `"Grupo Andes SA"`. Vale igual en todos los
+`nombre_cliente` de la API. `id_evento` vale `null` mientras no haya evento.
 
 ### GET /solicitudes
 
@@ -1138,11 +1154,11 @@ Respuesta 200: **Evento (detalle)**.
 | 2026-10-20 | 6 | Mensajes sin tildes. Reabrir un paso completado se bloquea también hacia `en_curso` (no solo hacia `pendiente`) si el siguiente ya empezó. Se aclara: fecha de confirmación y de finalización se conservan si se repite el estado, `id_proveedor: null` desasigna, body vacío en el PATCH responde 200, dos pasos pueden tener la misma fecha | ✘ |
 | 2026-10-20 | 7 | Se aclara el alcance de `?dias` (solo los próximos; acepta de 1 a 365, inválido = 30) y que `total_tareas` incluye las tareas libres. Sin cambios en los campos | ✘ |
 | 2026-10-20 | 8 | Mensajes sin tildes. Se aclara: no se valida la fecha al marcar `realizado`, un texto hecho solo de espacios cuenta como vacío y el feedback es parcial | ✘ |
+| 2026-10-20 | 9 | Revisión final. Errores generales documentados (401, `:id` inválido → 404, `"Hay datos con un formato invalido"`, JSON inválido, `"Ruta no encontrada"`). Todo 500 responde `"Error interno del servidor"` (empresas y auth tenían textos propios). Mensajes exactos de obligatorios de los catálogos. `nombre_cliente` no agrega el `-` de los clientes empresa. Pendientes de la Fase 1 cerrados | ✘ |
 
 ### Pendientes del back sobre la Fase 1 ya implementada
 
-- [ ] `POST /auth/login` devuelve `usuario.id`; tiene que devolver
-      `usuario.id_usuario`, igual que `/auth/perfil` y el registro.
-- [ ] `src/data/db.js`: agregar los `setTypeParser` de fechas (1082) y montos (1700).
-- [ ] `DELETE /empresas/:id` con datos asociados: responder 409 en vez de 500
-      (capturar el error `23503`).
+- [x] `POST /auth/login` devuelve `usuario.id_usuario`, igual que `/auth/perfil`
+      y el registro.
+- [x] `src/data/db.js` tiene los `setTypeParser` de fechas (1082) y montos (1700).
+- [x] `DELETE /empresas/:id` con datos asociados responde 409 (error `23503`).

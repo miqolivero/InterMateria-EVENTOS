@@ -7,8 +7,12 @@ import {
   editarCliente,
   cambiarActivoCliente
 } from "../controllers/clientes.controller.js";
+import { validarParamId } from "../middlewares/validarId.middleware.js";
 
 const router = Router();
+
+// Un :id con formato invalido es un registro que no existe: 404
+router.param("id", validarParamId("Cliente no encontrado"));
 
 // Todas las rutas del recurso piden token: de ahi sale el id_empresa con el
 // que se filtran los datos. Se aplica una sola vez para todo el router.

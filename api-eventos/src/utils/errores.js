@@ -28,6 +28,17 @@ export const responderError = (res, error, mensajes = {}) => {
     });
   }
 
+  // Errores de formato: un dato del request que la base no puede convertir al
+  // tipo de la columna. Los controladores validan los campos principales antes
+  // de llegar aca; esto es la red de seguridad para el resto, y es culpa de
+  // quien pide, no nuestra: 400, nunca 500.
+  //   22P02 = texto invalido para el tipo ("abc" en un INTEGER o un BOOLEAN)
+  //   22003 = numero fuera de rango (no entra en INTEGER o en NUMERIC(12,2))
+  //   22007 / 22008 = fecha con formato invalido o inexistente
+  if (["22P02", "22003", "22007", "22008"].includes(error.code)) {
+    return res.status(400).json({ mensaje: "Hay datos con un formato invalido" });
+  }
+
   // Cualquier otra cosa es un problema nuestro, no de quien pide. No se
   // devuelve el detalle del error de la base: eso es informacion interna.
   console.error(error);

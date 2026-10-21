@@ -13,8 +13,12 @@ import {
   obtenerTareasDelEvento,
   crearTarea
 } from "../controllers/tareas.controller.js";
+import { validarParamId } from "../middlewares/validarId.middleware.js";
 
 const router = Router();
+
+// Un :id con formato invalido es un registro que no existe: 404
+router.param("id", validarParamId("Evento no encontrado"));
 
 // Todas las rutas piden token: de ahi sale el id_empresa de los eventos.
 router.use(verificarToken);
