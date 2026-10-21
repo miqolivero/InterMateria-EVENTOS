@@ -236,6 +236,8 @@ rutas piden token.
 | PUT | `/:id` | Editar fecha, sede, condiciones y coordinador | 200 / 400 / 404 / 409 |
 | PATCH | `/:id/iniciar-preparacion` | De confirmado a en preparación | 200 / 404 / 409 |
 | GET | `/:id/servicios` | Lo acordado con cada proveedor | 200 / 404 |
+| PATCH | `/:id/cerrar` | Cerrar como `realizado` o `cancelado` | 200 / 400 / 404 / 409 |
+| PATCH | `/:id/feedback` | Feedback y observaciones de un evento realizado | 200 / 400 / 404 / 409 |
 
 - **Aceptar aplica la regla 4 en una sola transacción:** el presupuesto pasa a
   `aceptado`, las otras versiones abiertas a `reemplazado`, la solicitud a
@@ -248,6 +250,12 @@ rutas piden token.
   empresa: vínculo activo en `empleados_x_empresa` y empleado activo (regla 9).
 - Con el evento `realizado` o `cancelado` no se edita (409). `editable` lo
   indica al front.
+- **Cierre (regla 8).** Solo desde `confirmado` o `en_preparacion`, y guarda
+  `fecha_cierre` = hoy. Cancelar exige el motivo (`observaciones_cierre`) y pasa
+  la solicitud a `cancelada` en la misma transacción. No se exige que las
+  tareas estén completas: el front avisa y decide el usuario.
+- **Feedback.** Es la única edición posible con el evento cerrado, y solo si se
+  `realizado`. Es parcial: se actualiza solo lo que viene con texto.
 - En los servicios del evento, `tareas_generadas` y `paso_actual` (el orden de la
   primera tarea de la secuencia sin completar) se calculan en el SQL.
 - Las secuencias de PostgreSQL no vuelven atrás con un `ROLLBACK`: si una

@@ -1092,15 +1092,18 @@ Body:
   `cancelada` en la misma transacción.
 - Se guarda `fecha_cierre` = hoy.
 - No se valida que todas las tareas estén completas: el front muestra un aviso,
-  pero la decisión es del usuario.
+  pero la decisión es del usuario. Tampoco se valida la fecha: se puede marcar
+  `realizado` antes de la fecha del evento.
+- Un motivo hecho solo de espacios cuenta como vacío. Al cerrar como
+  `realizado`, `observaciones_cierre` es opcional (si no viene, queda `null`).
 
 Respuesta 200: **Evento (detalle)**, con `editable: false`.
 
 Errores:
 
-- 400 · `"Estado de cierre inválido"`
+- 400 · `"Estado de cierre invalido"`
 - 400 · `"Para cancelar un evento hay que indicar el motivo"`
-- 409 · `"El evento ya está cerrado"`
+- 409 · `"El evento ya esta cerrado"`
 
 ### PATCH /eventos/:id/feedback
 
@@ -1113,7 +1116,8 @@ Body:
 }
 ```
 
-- Los dos campos son opcionales, pero tiene que venir al menos uno.
+- Los dos campos son opcionales, pero tiene que venir al menos uno con texto.
+  Solo se actualizan los que vienen; el otro conserva su valor.
 - Solo para eventos `realizado`. Es la única edición que se permite con el evento cerrado.
 
 Respuesta 200: **Evento (detalle)**.
@@ -1133,6 +1137,7 @@ Respuesta 200: **Evento (detalle)**.
 | 2026-10-20 | 5 | Mensajes sin tildes (`"El evento esta cerrado..."`, `"...iniciar la preparacion..."`). Aceptar responde 409 `"La solicitud esta <estado> y no admite presupuestos"` si la solicitud está cerrada. Se aclara que el coordinador es opcional, que la validez vencida no impide aceptar y que el PUT reemplaza el objeto completo | ✘ |
 | 2026-10-20 | 6 | Mensajes sin tildes. Reabrir un paso completado se bloquea también hacia `en_curso` (no solo hacia `pendiente`) si el siguiente ya empezó. Se aclara: fecha de confirmación y de finalización se conservan si se repite el estado, `id_proveedor: null` desasigna, body vacío en el PATCH responde 200, dos pasos pueden tener la misma fecha | ✘ |
 | 2026-10-20 | 7 | Se aclara el alcance de `?dias` (solo los próximos; acepta de 1 a 365, inválido = 30) y que `total_tareas` incluye las tareas libres. Sin cambios en los campos | ✘ |
+| 2026-10-20 | 8 | Mensajes sin tildes. Se aclara: no se valida la fecha al marcar `realizado`, un texto hecho solo de espacios cuenta como vacío y el feedback es parcial | ✘ |
 
 ### Pendientes del back sobre la Fase 1 ya implementada
 

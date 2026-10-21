@@ -483,3 +483,145 @@ export const obtenerServiciosDelEvento = async (req, res) => {
     responderError(res, error);
   }
 };
+
+// ---------------------------------------------------------------------------
+// Fase 8: cierre y feedback (regla 8)
+// ---------------------------------------------------------------------------
+
+const MENSAJES_CIERRE = {
+  estadoInvalido: "Estado de cierre invalido",
+  faltaMotivo: "Para cancelar un evento hay que indicar el motivo",
+  yaCerrado: "El evento ya esta cerrado",
+  sinDatos: "No hay datos para actualizar",
+  noRealizado: "Solo se puede cargar feedback de un evento realizado"
+};
+
+const ESTADOS_CIERRE = ["realizado", "cancelado"];
+
+// Texto con contenido: un motivo hecho solo de espacios no es un motivo
+const tieneTexto = (valor) => typeof valor === "string" && valor.trim() !== "";
+
+// PATCH /api/eventos/:id/cerrar
+// Cierra el evento como realizado o cancelado. Si se cancela, la solicitud
+// tambien pasa a 'cancelada': son dos tablas, asi que va en una transaccion
+// (no puede quedar un evento cancelado con su solicitud 'aceptada').
+//
+// No se exige que las tareas esten completas: el front avisa, pero la decision
+// es del usuario (un evento se puede haber hecho aunque falte cargar algo).
+export const cerrarEvento = async (req, res) => {
+  const idEmpresa = req.usuario.id_empresa;
+  const { estado, observaciones_cierre } = req.body;
+
+  if (!ESTADOS_CIERRE.includes(estado)) {
+    return res.status(400).json({ mensaje: MENSAJES_CIERRE.estadoInvalido });
+  }
+
+  // Cancelar sin motivo deja un evento perdido sin explicacion: obligatorio
+  if (estado === "cancelado" && !tieneTexto(observaciones_cierre)) {
+    return res.status(400).json({ mensaje: MENSAJES_CIERRE.faltaMotivo });
+  }
+
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    // Bloqueado hasta el COMMIT: si dos personas cierran el evento a la vez,
+    // la segunda ve que ya esta cerrado y recibe 409.
+    const actual = await client.query(
+      `SELECT estado, id_solicitud FROM eventos
+       WHERE id_evento = $1 AND id_empresa = $2
+       FOR UPDATE`,
+      [req.params.id, idEmpresa]
+    );
+
+    if (actual.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ mensaje: MENSAJES.noEncontrado });
+    }
+
+    if (!ESTADOS_ABIERTOS.includes(actual.rows[0].estado)) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ mensaje: MENSAJES_CIERRE.yaCerrado });
+    }
+
+    await client.query(
+      `UPDATE eventos
+       SET estado = $1,
+           observaciones_cierre = $2,
+           fecha_cierre = CURRENT_DATE
+       WHERE id_evento = $3`,
+      [
+        estado,
+        tieneTexto(observaciones_cierre) ? observaciones_cierre : null,
+        req.params.id
+      ]
+    );
+
+    if (estado === "cancelado") {
+      await client.query(
+        "UPDATE solicitudes SET estado = 'cancelada' WHERE id_solicitud = $1",
+        [actual.rows[0].id_solicitud]
+      );
+    }
+
+    const evento = await buscarEvento(client, req.params.id, idEmpresa);
+
+    await client.query("COMMIT");
+
+    res.json(evento);
+  } catch (error) {
+    await client.query("ROLLBACK");
+    responderError(res, error);
+  } finally {
+    client.release();
+  }
+};
+
+// PATCH /api/eventos/:id/feedback
+// La unica edicion permitida con el evento cerrado, y solo si se realizo (un
+// evento cancelado no tiene opinion del cliente sobre el servicio). Parcial:
+// solo se actualizan los campos que vienen con texto.
+export const cargarFeedback = async (req, res) => {
+  const idEmpresa = req.usuario.id_empresa;
+  const { feedback_cliente, observaciones_cierre } = req.body;
+
+  const hayFeedback = tieneTexto(feedback_cliente);
+  const hayObservaciones = tieneTexto(observaciones_cierre);
+
+  if (!hayFeedback && !hayObservaciones) {
+    return res.status(400).json({ mensaje: MENSAJES_CIERRE.sinDatos });
+  }
+
+  try {
+    // CASE: si el campo no vino, la columna se queda con su valor. El estado
+    // va en el WHERE, asi el chequeo y el cambio son una sola operacion.
+    const resultado = await pool.query(
+      `UPDATE eventos
+       SET feedback_cliente = CASE WHEN $1 THEN $2 ELSE feedback_cliente END,
+           observaciones_cierre = CASE WHEN $3 THEN $4 ELSE observaciones_cierre END
+       WHERE id_evento = $5 AND id_empresa = $6 AND estado = 'realizado'
+       RETURNING id_evento`,
+      [
+        hayFeedback,
+        hayFeedback ? feedback_cliente : null,
+        hayObservaciones,
+        hayObservaciones ? observaciones_cierre : null,
+        req.params.id,
+        idEmpresa
+      ]
+    );
+
+    if (resultado.rows.length === 0) {
+      const estado = await estadoEvento(req.params.id, idEmpresa);
+      if (!estado) {
+        return res.status(404).json({ mensaje: MENSAJES.noEncontrado });
+      }
+      return res.status(409).json({ mensaje: MENSAJES_CIERRE.noRealizado });
+    }
+
+    res.json(await buscarEvento(pool, req.params.id, idEmpresa));
+  } catch (error) {
+    responderError(res, error);
+  }
+};

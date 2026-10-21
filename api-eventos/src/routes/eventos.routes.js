@@ -5,7 +5,9 @@ import {
   obtenerEventoPorId,
   editarEvento,
   iniciarPreparacion,
-  obtenerServiciosDelEvento
+  obtenerServiciosDelEvento,
+  cerrarEvento,
+  cargarFeedback
 } from "../controllers/eventos.controller.js";
 import {
   obtenerTareasDelEvento,
@@ -32,5 +34,9 @@ router.get("/:id/servicios", obtenerServiciosDelEvento);
 // POST /api/servicios-evento/:id/generar-tareas)
 router.get("/:id/tareas", obtenerTareasDelEvento);
 router.post("/:id/tareas", crearTarea);
+
+// Fase 8: cierre (realizado o cancelado) y feedback del cliente
+router.patch("/:id/cerrar", cerrarEvento);
+router.patch("/:id/feedback", cargarFeedback);
 
 export default router;
