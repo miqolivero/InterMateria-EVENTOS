@@ -45,12 +45,12 @@ aceptado y ninguna tarea se saltó un paso de la secuencia.
 
 | Evento | Empresa | Estado | Cuándo | Para mostrar |
 | --- | --- | --- | --- | --- |
-| 1 · Juan Perez | 1 | en preparación | en 25 días | tarea vencida, tarea ≠ proveedor (fotografía), un servicio sin tareas para "Generar tareas" |
+| 1 · Juan Pérez | 1 | en preparación | en 25 días | tarea vencida, tarea ≠ proveedor (fotografía), un servicio sin tareas para "Generar tareas" |
 | 2 · Grupo Andes SA | 1 | confirmado | en 10 días | tarea vencida, un servicio sin confirmar |
-| 3 · Colegio San Jose | 1 | realizado | hace 15 días | feedback cargado; la versión 1 del presupuesto fue rechazada |
+| 3 · Colegio San José | 1 | realizado | hace 15 días | feedback cargado; la versión 1 del presupuesto fue rechazada |
 | 4 · Martina Ruiz | 1 | cancelado | — | motivo de la cancelación; no aparece en el tablero |
-| 5 · Paula Sanchez | 2 | en preparación | en 6 días | tarea vencida, un servicio sin proveedor |
-| 6 · Hernan Diaz | 2 | confirmado | en 20 días | sin coordinador |
+| 5 · Paula Sánchez | 2 | en preparación | en 6 días | tarea vencida, un servicio sin proveedor |
+| 6 · Hernán Díaz | 2 | confirmado | en 20 días | sin coordinador |
 
 Solicitudes en todos los estados: la **4** está `presupuestada`, con un
 presupuesto **presentado** listo para aceptar en vivo; la **1** y la **3** están
@@ -369,8 +369,8 @@ Los carga `seed.sql`. **La contraseña de todos es `admin123`.**
 
 | Email | Rol | Empresa | Empleado |
 | --- | --- | --- | --- |
-| `admin@eventosdelcentro.com` | admin | 1 · Eventos del Centro | Laura Gimenez |
-| `usuario@eventosdelcentro.com` | usuario | 1 · Eventos del Centro | Martin Rios |
+| `admin@eventosdelcentro.com` | admin | 1 · Eventos del Centro | Laura Giménez |
+| `usuario@eventosdelcentro.com` | usuario | 1 · Eventos del Centro | Martín Ríos |
 | `admin@fiestasnorte.com` | admin | 2 · Fiestas Norte | Nadia Paz |
 | `usuario@fiestasnorte.com` | usuario | 2 · Fiestas Norte | — |
 | `admin@produccionessur.com` | admin | 3 · Producciones Sur | — |
