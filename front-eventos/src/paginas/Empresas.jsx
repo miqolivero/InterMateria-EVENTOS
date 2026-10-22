@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Alert, App, Button, Card, Empty, Input, Popconfirm, Select, Space, Table, Tag, Typography } from "antd";
-import { ApartmentOutlined, DeleteOutlined, EditOutlined, PlusOutlined, ReloadOutlined, SearchOutlined } from "@ant-design/icons";
+import { DeleteOutlined, EditOutlined, PlusOutlined, ReloadOutlined, SearchOutlined } from "@ant-design/icons";
 import { obtenerEmpresas, eliminarEmpresa } from "../servicios/empresasService";
 import { useSesion } from "../contexto/useSesion";
 import { mensajeError } from "../utils/errores";
@@ -10,7 +10,7 @@ import { useConsulta } from "../contexto/useConsulta";
 
 const consultarEmpresas = async () => (await obtenerEmpresas()).data;
 
-export default function Empresas({ publico = false }) {
+export default function Empresas() {
   const { usuario } = useSesion();
   const { message } = App.useApp();
   const { datos, cargando, error: errorConsulta, recargar } = useConsulta(consultarEmpresas);
@@ -53,12 +53,9 @@ export default function Empresas({ publico = false }) {
     </Popconfirm>
   </Space> });
 
-  return <div className={publico ? "pagina-publica" : ""}>
-    {publico && <header className="cabecera-publica"><Link className="marca-publica" to="/"><ApartmentOutlined /> eventos</Link>
-      <Space><Link to="/login"><Button>Iniciar sesión</Button></Link><Link to="/registro"><Button type="primary">Crear cuenta</Button></Link></Space></header>}
+  return <div>
     <EncabezadoPagina titulo="Empresas"
       acciones={esAdmin && <Link to="/empresas/nueva"><Button type="primary" icon={<PlusOutlined />}>Nueva empresa</Button></Link>} />
-    {publico && <Alert className="aviso-formulario" type="info" showIcon title="Iniciá sesión para gestionar tu empresa." />}
     {error && <Alert className="aviso-formulario" type="error" showIcon title={error}
       action={<Button onClick={recargar} size="small">Reintentar</Button>} />}
     <Card className="panel-tabla">

@@ -7,13 +7,17 @@ usuario pertenece a una empresa, y ese `id_empresa` viaja en el token.
 
 ## Requisitos
 
-- Node.js 18 o superior
+- Node.js 22.12 o superior para ejecutar también el frontend (la API admite Node 18+)
 - PostgreSQL
 
 ## Instalación
 
+Seguir la [guía de instalación completa](../docs/INSTALACION.md) para una copia
+nueva: configuración de .env, base de datos, arranque y solución de problemas.
+Ejecutar los comandos de este README desde `api-eventos`.
+
 ```bash
-npm install
+npm ci
 ```
 
 ## Base de datos
@@ -31,8 +35,8 @@ Son dos scripts, y el orden importa:
 
 ```bash
 psql -U postgres -c "CREATE DATABASE eventos;"
-psql -U postgres -d eventos -f database/schema.sql
-psql -U postgres -d eventos -f database/seed.sql
+psql -U postgres -d eventos -v ON_ERROR_STOP=1 --single-transaction -f database/schema.sql
+psql -U postgres -d eventos -v ON_ERROR_STOP=1 --single-transaction -f database/seed.sql
 ```
 
 - **`schema.sql`** crea las 16 tablas del modelo, con sus claves foráneas, los

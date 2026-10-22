@@ -1,5 +1,10 @@
 # ROADMAP · Sistema de Gestión de Eventos
 
+Las fases de implementación 0 a 9 ya están integradas en `main`. Este documento
+conserva el plan y sus criterios de revisión; las listas por fase no sustituyen
+una prueba completa de integración. Ver [estado de integración](front-eventos/INTEGRACION-BACKEND.md)
+y [guía de instalación](docs/INSTALACION.md) para el estado y los pasos actuales.
+
 Plan completo del proyecto, dividido entre los dos integrantes:
 
 | Parte | Responsable | Carpeta |
@@ -409,7 +414,7 @@ falta resolver con varios eventos en paralelo.
 
 - Revisar contra `front-eventos/CLAUDE.md`.
 - Unificar los textos, los mensajes de error y los estados vacíos.
-- `docs/DEMO.md`: guion de 10 minutos que recorre el circuito completo y
+- `front-eventos/DEMO.md`: guion de 10 minutos que recorre el circuito completo y
   muestra la diferencia entre tarea completada y proveedor confirmado.
 
 ### Los dos

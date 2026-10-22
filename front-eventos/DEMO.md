@@ -1,8 +1,11 @@
 # Recorrido de demostración · 10 minutos
 
-Usar la API real y las cuentas de demostración que documente el responsable del
-backend. No usar la vista ficticia de 5175 para demostrar guardados o reglas del
-servidor. Acordar previamente qué datos de prueba se pueden crear/modificar.
+Preparar una base nueva de demostración siguiendo [Instalación](../docs/INSTALACION.md)
+y arrancar la API real. El seed incluye `admin@eventosdelcentro.com` y
+`usuario@eventosdelcentro.com`, ambos con contraseña `admin123`; las demás
+cuentas están en el [README del backend](../api-eventos/README.md).
+No usar la vista ficticia de 5175 para demostrar guardados o reglas del servidor.
+Acordar previamente qué datos de prueba se pueden crear/modificar.
 
 1. **Acceso (1 min).** Ingresar y mostrar empresa, usuario y rol. Enseñar que un
    usuario común no puede acceder al formulario de administración de empresas.

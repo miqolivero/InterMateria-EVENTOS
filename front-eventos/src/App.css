@@ -10,14 +10,11 @@
 .enlace-volver { display: inline-block; margin-bottom: 20px; font-size: 13px; }
 .acceso-enlace { text-align: center; font-size: 13px; color: #666; margin: 20px 0 0; }
 .pantalla-espera { min-height: 60vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; color: #666; }
-.pagina-publica { max-width: 1200px; margin: 0 auto; padding: 0 24px 32px; }
-.cabecera-publica { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 20px 0 28px; }
-.marca-publica { font-size: 20px; font-weight: 600; color: #262626; }
 .transicion-pagina { animation: entrada-suave 150ms ease-out; }
 .indicadores-seguimiento { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 16px; margin-bottom: 20px; }
 @media (max-width: 1199px) { .indicadores-seguimiento { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 767px) { .indicadores-seguimiento { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 420px) { .indicadores-seguimiento { grid-template-columns: 1fr; } }
 @keyframes entrada-suave { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
-@media (max-width: 767px) { .encabezado-pagina { flex-wrap: wrap; } .pagina-publica { padding: 0 16px 24px; } .cabecera-publica { flex-wrap: wrap; } }
+@media (max-width: 767px) { .encabezado-pagina { flex-wrap: wrap; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; } }

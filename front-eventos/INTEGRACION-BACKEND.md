@@ -1,8 +1,9 @@
 # Estado de integración
 
-Backend del equipo (`origin/backend`, `72a7d53`) integrado localmente en
-`frontend` el 22/10/2026, junto con las correcciones visuales publicadas por el
-equipo. No se publicó ningún cambio en main.
+Backend del equipo (`origin/backend`, `72a7d53`) y frontend integrados y
+publicados en `main` mediante el commit `11974bc`, el 22/10/2026. Incluye
+protección de rutas, correcciones visuales y actualización de la base antigua.
+Para una copia nueva, seguir [Instalación](../docs/INSTALACION.md).
 
 ## Qué está preparado
 
@@ -17,9 +18,9 @@ hacia pendiente o en_curso si el siguiente paso comenzó y feedback con texto.
 
 ## Estado de las ramas revisadas
 
-- `origin/main`: contrato completo, pero implementación de la fase 1.
-- `origin/back/fase-2`: implementación de catálogos.
-- `origin/backend`: implementación hasta la fase 9 y contrato revisado.
+- `main`: implementación integrada de las fases 1 a 9 y contrato revisado.
+- `frontend`: rama de trabajo de la interfaz, integrada en main.
+- `backend`: rama de trabajo de la API, integrada en main hasta `72a7d53`.
 
 La base local anterior se actualizó con `npm run db:actualizar`, después de
 generar un respaldo completo. Se conservaron las cuatro empresas y el cliente
@@ -38,6 +39,10 @@ Sin token, clientes devuelve 401. Las cuentas temporales se eliminaron al
 terminar; no se dejaron usuarios ni datos de demostración.
 
 ## Verificaciones del frontend
+
+- Instalación nueva: schema y seed ejecutados sin errores en una base temporal;
+  16 tablas, 3 empresas, 6 usuarios y 6 eventos. La contraseña de demo documentada
+  coincide con su hash. La base temporal se eliminó al terminar.
 
 - Compilación, análisis estático y pruebas automáticas sin escrituras reales.
 - Vista manual separada en localhost:5175, con fixtures del contrato y aviso

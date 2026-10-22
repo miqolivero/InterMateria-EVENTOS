@@ -1,10 +1,12 @@
 # Frontend · Sistema de Eventos
 
 React 19, Vite 8, React Router, axios y Ant Design 6. Interfaz en español, con
-estilo simple, menú adaptable a móvil y transiciones cortas. Este trabajo se
-limita a `front-eventos/`; no modifica la base de datos ni el backend.
+estilo simple, menú adaptable a móvil y transiciones cortas.
 
 ## Ejecutar con la API del equipo
+
+Para una copia nueva, seguir primero la [guía de instalación](../docs/INSTALACION.md).
+Ejecutar los comandos de este README desde `front-eventos`.
 
 Requiere Node compatible con Vite 8: 20.19+ o 22.12+. Copiar `.env.example` a
 `.env` y configurar:
@@ -14,13 +16,13 @@ VITE_API_URL=http://localhost:3000/api
 ```
 
 ```bash
-npm install
+npm ci
 npm run dev
 ```
 
 Abrir `http://localhost:5173`. El puerto es fijo para coincidir con el CORS de la
-API. La configuración de backend y PostgreSQL la administra su responsable;
-no ejecutar scripts SQL como paso para levantar este frontend.
+API. Preparar PostgreSQL e iniciar la API según la guía antes de usar el
+frontend real. Compilar la interfaz no crea tablas ni usuarios.
 
 ## Pantallas
 
@@ -108,8 +110,8 @@ real o un guardado exitoso. La API ficticia usa exclusivamente 127.0.0.1:3305.
 Detener con Ctrl+C. La compilación de esa vista se guarda en una carpeta
 ignorada dentro de node_modules y no comparte caché con el servidor de 5173.
 
-La revisión final contra la API real requiere la implementación de la rama
-`backend` integrada o ejecutada por su responsable. Ver `INTEGRACION-BACKEND.md`.
+El backend completo ya está integrado en `main`; ver `INTEGRACION-BACKEND.md`
+para las verificaciones realizadas y las pruebas de integración pendientes.
 El recorrido manual completo está en `DEMO.md`.
 
 ## Estructura
