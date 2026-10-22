@@ -39,7 +39,7 @@ export default function LayoutPrincipal() {
       {marca}{menu}
     </Layout.Sider>}
     <Drawer title={marca} placement="left" open={menuAbierto} onClose={() => setMenuAbierto(false)}
-      width={250} styles={{ body: { padding: 0 } }}>
+      size={250} styles={{ body: { padding: 0 } }}>
       {menu}
     </Drawer>
     <Layout>
@@ -53,7 +53,7 @@ export default function LayoutPrincipal() {
         </Space>
         <Space size="middle">
           <div className="datos-usuario"><Typography.Text strong>{usuario.nombre}</Typography.Text>
-            <Tag bordered={false}>{usuario.rol === "admin" ? "Administrador" : "Usuario"}</Tag></div>
+            <Tag variant="filled">{usuario.rol === "admin" ? "Administrador" : "Usuario"}</Tag></div>
           <Button type="text" icon={<LogoutOutlined />} aria-label="Cerrar sesión" title="Cerrar sesión"
             onClick={() => { salir(); navigate("/login", { replace: true }); }} />
         </Space>
