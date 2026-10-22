@@ -45,7 +45,7 @@ function EditorTarea({ id, datos, cerrar, guardado }) {
 export function TablaTareas({ tareas, editable, actualizar, editar, solicitarCambio, mostrarEvento = false, secuenciaCompleta = tareas }) {
   const { ocupado, ejecutar } = useAccion();
   return <Table rowKey="id_tarea" dataSource={tareas} pagination={false} scroll={{ x: 850 }} columns={[
-    { title: "Tarea", dataIndex: "descripcion", render: (v, tarea) => <Space direction="vertical" size={4}><span>{v}</span>{tarea.vencida && <Tag color="red">Vencida</Tag>}</Space> },
+    { title: "Tarea", dataIndex: "descripcion", render: (v, tarea) => <Space orientation="vertical" size={4}><span>{v}</span>{tarea.vencida && <Tag color="red">Vencida</Tag>}</Space> },
     ...(mostrarEvento ? [{ title: "Evento", key: "evento", render: (_, t) => <Link to={`/eventos/${t.id_evento}`}>{t.nombre_cliente || `Evento #${t.id_evento}`}</Link> }] : []),
     { title: "Responsable", dataIndex: "nombre_responsable", render: (v) => v || "Sin asignar" },
     { title: "Fecha prevista", dataIndex: "fecha_prevista", render: formatearFecha },
@@ -82,8 +82,13 @@ export default function TareasEvento({ id, editable }) {
       const grupo = tareas.filter((t) => t.id_servicio_x_evento === servicio && t.id_tipo_tarea).sort((a, b) => a.orden - b.orden);
       const visibles = filtrar(grupo);
       if (!visibles.length) return null;
+      // Sin `current`, antd marca siempre el paso 1 como el actual aunque ya
+      // este completo. El actual es el primero sin completar (o el ultimo si
+      // la secuencia termino).
+      const primeroAbierto = grupo.findIndex((t) => t.estado_tarea !== "completada");
+      const pasoActual = primeroAbierto === -1 ? grupo.length - 1 : primeroAbierto;
       return <Card key={servicio} title={`${grupo[0].nombre_servicio} · ${grupo[0].nombre_proveedor || "Sin proveedor"}`} style={{ marginBottom: 20 }}>
-        <Steps size="small" responsive style={{ marginBottom: 24 }} items={grupo.map((t) => ({ title: t.nombre_tipo_tarea || `Paso ${t.orden}`,
+        <Steps size="small" responsive current={pasoActual} style={{ marginBottom: 24 }} items={grupo.map((t) => ({ title: t.nombre_tipo_tarea || `Paso ${t.orden}`,
           status: t.estado_tarea === "completada" ? "finish" : t.estado_tarea === "en_curso" ? "process" : "wait" }))} />
         <TablaTareas tareas={visibles} secuenciaCompleta={grupo} editable={editable} editar={setEditor} actualizar={consulta.recargar} />
       </Card>;

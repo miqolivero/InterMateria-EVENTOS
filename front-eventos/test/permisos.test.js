@@ -31,6 +31,13 @@ test("las rutas de administración ocultan el formulario a usuarios comunes", as
     assert.match(fallo, /Servidor no disponible/);
     assert.match(fallo, /Reintentar/);
     assert.doesNotMatch(fallo, /id="formulario-admin"/);
+    // Un perfil guardado o un error anterior no habilitan acceso sin token.
+    globalThis.localStorage = { getItem: () => null };
+    assert.equal(contenido({ ...base, usuario: { rol: "admin" } }), "");
+    assert.equal(contenido({ ...base, cargando: true, usuario: null }), "");
+    assert.equal(contenido({ ...base, errorSesion: "Servidor no disponible", usuario: { rol: "admin" } }), "");
+    globalThis.localStorage = { getItem: () => "token-de-prueba" };
+    assert.equal(contenido({ ...base, usuario: null }), "");
   } finally { await vite.close(); }
 });
 

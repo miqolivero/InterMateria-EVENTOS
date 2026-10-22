@@ -34,10 +34,18 @@ cambia, se actualiza este archivo **y se avisa** antes de mergear.
 
 Estos errores aplican a todos los endpoints y **no se repiten** en cada uno:
 
-- `401` en las rutas protegidas.
-- `404 · "<Recurso> no encontrado"` cuando el `:id` de la URL no existe o es de
-  otra empresa.
-- `500`.
+- `401` en las rutas protegidas: `"Token no proporcionado"`, `"Token invalido"`
+  o `"El token expiro"`.
+- `404 · "<Recurso> no encontrado"` cuando el `:id` de la URL no existe, es de
+  otra empresa **o no es un entero válido** (`/clientes/abc`).
+- `400 · "Hay datos con un formato invalido"`: red de seguridad para un dato que
+  la base no puede convertir a su tipo (un texto donde va un número o un
+  booleano, una fecha imposible, un número que no entra en la columna).
+- `400 · "El cuerpo del pedido no es un JSON valido"`.
+- `404 · "Ruta no encontrada"` para una ruta que no existe.
+- `500 · "Error interno del servidor"`, siempre con ese texto.
+- Un filtro de listado con formato inválido (`?desde=hola`, `?id_cliente=abc`)
+  se ignora: no da error.
 
 > **Nota para el back:** `pg` devuelve los `DATE` como objeto `Date` (que al
 > pasar a JSON se corre de zona horaria) y los `DECIMAL` como string. En
@@ -212,8 +220,14 @@ Las cinco entidades siguen **el mismo patrón**:
 - Sin `?activo`, el listado devuelve todos. `?buscar` busca sin distinguir
   mayúsculas en los campos que se indican en cada recurso.
 - No hay `DELETE`: la baja es lógica.
-- Errores comunes: 400 por campos obligatorios (`"El <campo> es obligatorio"`)
-  y 400 por duplicados.
+- Errores comunes: 400 por campos obligatorios y 400 por duplicados. Los
+  mensajes exactos de obligatorios son:
+  - clientes: `"El nombre y el apellido son obligatorios"`
+  - tipos de evento y servicios: `"El nombre es obligatorio"`
+  - proveedores: `"La razon social es obligatoria"`
+  - empleados: `"El legajo, el nombre y el apellido son obligatorios"`
+- `PATCH /:id/activo` con un valor que no es booleano: 400 ·
+  `"El campo activo tiene que ser true o false"`.
 
 ## Clientes · `/api/clientes`
 
@@ -292,6 +306,7 @@ presupuesto para el `Select` de proveedor.
 ```
 
 - Obligatorio: `razon_social`.
+- 400 · `"Ya existe un proveedor con ese CUIT"`
 - `servicios` es de solo lectura en POST y PUT. Se modifica con el endpoint de abajo.
 
 ### GET /proveedores/:id/servicios
@@ -374,8 +389,9 @@ Objeto **Solicitud** (como aparece en el listado):
 }
 ```
 
-`nombre_cliente` es nombre y apellido concatenados. `id_evento` vale `null`
-mientras no haya evento.
+`nombre_cliente` es nombre y apellido concatenados. Para un cliente empresa (con
+apellido `-`) el guion no se agrega: `"Grupo Andes SA"`. Vale igual en todos los
+`nombre_cliente` de la API. `id_evento` vale `null` mientras no haya evento.
 
 ### GET /solicitudes
 
@@ -384,6 +400,9 @@ Filtros (todos opcionales): `?estado=pendiente`, `?id_cliente=1`,
 `?buscar=texto` (nombre del cliente).
 
 Ordenado por `fecha_evento_prevista` ascendente. Respuesta 200: `[Solicitud]`.
+
+Un filtro con formato inválido (`?desde=hola`, `?id_cliente=abc`) se ignora:
+no da error.
 
 ### GET /solicitudes/:id
 
@@ -434,8 +453,9 @@ Respuesta 201: la **Solicitud** completa (formato del listado).
 Errores:
 
 - 400 · `"El cliente, el tipo de evento, la fecha y la cantidad de asistentes son obligatorios"`
-- 400 · `"El cliente no existe o está inactivo"`
-- 400 · `"El tipo de evento no existe o está inactivo"`
+  (también si la fecha no tiene formato `YYYY-MM-DD` o no existe, como `2026-02-31`)
+- 400 · `"El cliente no existe o esta inactivo"`
+- 400 · `"El tipo de evento no existe o esta inactivo"`
 - 400 · `"La cantidad de asistentes tiene que ser mayor a 0"`
 - 400 · `"La fecha del evento no puede ser anterior a hoy"`
 
@@ -458,7 +478,7 @@ Solo acepta `cancelada` o `rechazada`, y solo desde `pendiente` o
 
 Respuesta 200: **Solicitud**.
 
-- 400 · `"Estado inválido"`
+- 400 · `"Estado invalido"`
 - 409 · `"No se puede cambiar el estado de una solicitud <estado actual>"`
 
 ---
@@ -528,8 +548,11 @@ Crea la versión 1 en `borrador`, sin renglones. Body opcional:
 
 Respuesta 201: **Presupuesto**.
 
-- 409 · `"La solicitud ya tiene presupuestos. Usá 'nueva versión'"`
-- 409 · `"La solicitud está <estado> y no admite presupuestos"` (si no está
+- 400 · `"La validez tiene que ser un numero de dias mayor a 0"` (si viene
+  `validez_dias` y no es un entero mayor a 0)
+- 404 · `"Solicitud no encontrada"`
+- 409 · `"La solicitud ya tiene presupuestos. Usa 'nueva version'"`
+- 409 · `"La solicitud esta <estado> y no admite presupuestos"` (si no está
   `pendiente` ni `presupuestada`)
 
 ### GET /presupuestos/:id
@@ -562,9 +585,14 @@ Errores:
 - 400 · `"El servicio y el importe al cliente son obligatorios"`
 - 400 · `"Los importes no pueden ser negativos"`
 - 400 · `"La cantidad tiene que ser mayor a 0"`
-- 400 · `"El servicio no existe o está inactivo"`
-- 400 · `"El proveedor no ofrece ese servicio"`
+- 400 · `"El servicio no existe o esta inactivo"`
+- 400 · `"El proveedor no ofrece ese servicio"` (también si el proveedor está
+  inactivo)
 - 409 · `"Solo se puede modificar un presupuesto en borrador"`
+
+Un importe que no es un número (`"abc"`) responde el 400 de importes, y una
+`cantidad` que no es un entero, el 400 de cantidad. El `importe_total` nunca se
+toma del body: si viene, se ignora.
 
 ### PUT /presupuestos/:id/detalle/:idDetalle
 
@@ -574,9 +602,11 @@ Respuesta 200: **Presupuesto**.
 
 Además, existe `PUT /presupuestos/:id` con `{ validez_dias, observaciones }`
 para editar la cabecera (solo en `borrador`). Respuesta 200: **Presupuesto**.
+Responde el mismo 400 de validez que la creación y el 409
+`"Solo se puede modificar un presupuesto en borrador"`.
 
 Si `:idDetalle` no existe o no es de ese
-presupuesto, 404 · `"Renglón no encontrado"`.
+presupuesto, 404 · `"Renglon no encontrado"`.
 
 ### DELETE /presupuestos/:id/detalle/:idDetalle
 
@@ -588,22 +618,31 @@ reciba los totales recalculados.
 ### PATCH /presupuestos/:id/presentar
 
 Pasa de `borrador` a `presentado`, y la solicitud a `presupuestada`. Sin body.
-Respuesta 200: **Presupuesto**.
+`fecha_emision` pasa a ser la fecha de hoy: la validez se cuenta desde que el
+cliente recibe la propuesta. Respuesta 200: **Presupuesto**.
 
 - 400 · `"No se puede presentar un presupuesto sin renglones"`
 - 409 · `"Solo se puede presentar un presupuesto en borrador"`
+- 409 · `"La solicitud esta <estado> y no admite presupuestos"` (si la
+  solicitud se canceló o se rechazó)
 
 ### POST /presupuestos/:id/nueva-version
 
 Crea una versión nueva en `borrador`, con `numero_version` = máximo + 1 y una
 copia del detalle. Se puede hacer desde `presentado` (y la versión anterior
 pasa a `reemplazado`) o desde `rechazado` (y la anterior queda `rechazado`).
-Todo en una transacción. Sin body.
+Todo en una transacción. Sin body. La versión nueva copia también
+`validez_dias` y `observaciones`, y su `fecha_emision` es la de hoy.
+
+Solo se puede crear desde la **última** versión: si no, desde una v1 rechazada
+se podría crear una v3 mientras la v2 sigue presentada.
 
 Respuesta 201: el **Presupuesto** nuevo.
 
-- 409 · `"Solo se puede crear una nueva versión desde un presupuesto presentado o rechazado"`
-- 409 · `"Ya hay una versión en borrador para esta solicitud"`
+- 409 · `"Solo se puede crear una nueva version desde un presupuesto presentado o rechazado"`
+- 409 · `"Ya hay una version en borrador para esta solicitud"`
+- 409 · `"Solo se puede crear una nueva version desde la ultima version"`
+- 409 · `"La solicitud esta <estado> y no admite presupuestos"`
 
 ### PATCH /presupuestos/:id/rechazar
 
@@ -692,22 +731,30 @@ Body:
     `importe_acordado_cliente`, y también se copian `descripcion` y
     `cantidad`. El estado queda `solicitada`.
 - El evento se guarda con el `id_empresa` del token.
+- `id_empleado_coordinador` es opcional: si no viene (o viene `null`), el
+  evento queda sin coordinador.
+- La `validez_dias` del presupuesto es informativa: un presupuesto vencido se
+  puede aceptar igual.
 
 Respuesta 201: **Evento (detalle)**.
 
 Errores:
 
-- 400 · `"La fecha del evento es obligatoria"`
+- 400 · `"La fecha del evento es obligatoria"` (también si no tiene formato
+  `YYYY-MM-DD` o no existe)
 - 400 · `"La fecha del evento no puede ser anterior a hoy"`
 - 400 · `"El coordinador no es un empleado activo de la empresa"`
 - 409 · `"Solo se puede aceptar un presupuesto presentado"`
 - 409 · `"La solicitud ya tiene un evento"`
+- 409 · `"La solicitud esta <estado> y no admite presupuestos"` (si la
+  solicitud se canceló o se rechazó con el presupuesto ya presentado)
 
 ### GET /eventos
 
 Filtros: `?estado=en_preparacion`, `?desde=&hasta=` (sobre
 `fecha_evento_confirmada`), `?id_coordinador=1` y `?buscar=texto` (nombre del
-cliente). Ordenado por fecha ascendente.
+cliente). Ordenado por fecha ascendente. Un filtro con formato inválido se
+ignora, igual que en solicitudes.
 
 Respuesta 200: `[Evento (listado)]`.
 
@@ -720,14 +767,18 @@ Respuesta 200: **Evento (detalle)**.
 Body: `fecha_evento_confirmada`*, `sede_acordada`, `condiciones_acordadas` e
 `id_empleado_coordinador`. Respuesta 200: **Evento (detalle)**.
 
+Se manda el objeto completo, como en los catálogos: un campo que no viene queda
+en `null` (por ejemplo, sin `id_empleado_coordinador` el evento queda sin
+coordinador).
+
 - 400 · los mismos errores de validación que en aceptar
-- 409 · `"El evento está cerrado y no se puede modificar"`
+- 409 · `"El evento esta cerrado y no se puede modificar"`
 
 ### PATCH /eventos/:id/iniciar-preparacion
 
 Pasa de `confirmado` a `en_preparacion`. Sin body. Respuesta 200: **Evento (detalle)**.
 
-- 409 · `"Solo se puede iniciar la preparación de un evento confirmado"`
+- 409 · `"Solo se puede iniciar la preparacion de un evento confirmado"`
 
 ### GET /eventos/:id/servicios
 
@@ -797,7 +848,7 @@ Objeto **Tarea**:
 
 Con el evento cerrado (`realizado` o `cancelado`), todos los POST, PUT, PATCH y
 DELETE de esta fase responden 409 ·
-`"El evento está cerrado y no se puede modificar"`.
+`"El evento esta cerrado y no se puede modificar"`.
 
 ## Servicios del evento
 
@@ -816,14 +867,18 @@ Actualización parcial: se mandan solo los campos que cambian.
 ```
 
 - Si `estado_proveedor` pasa a `confirmada`, se guarda
-  `fecha_confirmacion_proveedor` = hoy. Si vuelve a `solicitada`, ese campo se limpia.
+  `fecha_confirmacion_proveedor` = hoy (si ya estaba confirmada, se conserva la
+  fecha original). Si vuelve a `solicitada`, ese campo se limpia.
+- `"id_proveedor": null` deja el servicio sin proveedor. Un proveedor inactivo
+  responde lo mismo que uno que no ofrece el servicio.
+- Un body vacío no es un error: responde 200 con el servicio sin cambios.
 - **No modifica ninguna tarea** (regla 6).
 
 Respuesta 200: **ServicioEvento**.
 
 Errores:
 
-- 400 · `"Estado de proveedor inválido"`
+- 400 · `"Estado de proveedor invalido"`
 - 400 · `"El proveedor no ofrece ese servicio"`
 - 400 · `"Los importes no pueden ser negativos"`
 
@@ -840,7 +895,8 @@ Body:
 }
 ```
 
-- `fechas` tiene 4 fechas, una por paso, en orden y sin retroceder.
+- `fechas` tiene 4 fechas, una por paso, en orden y sin retroceder (dos pasos
+  pueden caer el mismo día).
 - La `descripcion` de cada tarea se arma sola: `"<tipo de tarea> · <servicio> (<proveedor>)"`.
 
 Respuesta 201: `[Tarea]`, las 4 tareas creadas.
@@ -882,7 +938,7 @@ Respuesta 201: **Tarea**.
 
 Errores:
 
-- 400 · `"La descripción, el responsable y la fecha prevista son obligatorios"`
+- 400 · `"La descripcion, el responsable y la fecha prevista son obligatorios"`
 - 400 · `"El responsable no es un empleado activo de la empresa"`
 - 400 · `"El servicio no pertenece a este evento"`
 
@@ -906,16 +962,20 @@ Body:
   `en_curso` o `completada` si la de orden N−1 del mismo servicio está `completada`.
 - Al pasar a `completada` se guarda `fecha_finalizacion` = hoy. Si la tarea
   vuelve a otro estado, se limpia.
-- Una tarea no puede volver a `pendiente` si la siguiente de la secuencia ya
-  está `en_curso` o `completada`.
+- Una tarea completada no puede volver a `pendiente` **ni a `en_curso`** si la
+  siguiente de la secuencia ya está `en_curso` o `completada`: si no, quedaría
+  un paso en curso con el anterior sin terminar.
+- Si una tarea ya completada se vuelve a marcar `completada`, conserva su
+  `fecha_finalizacion` original.
+- Las tareas libres pasan a cualquier estado: no tienen secuencia.
 
 Respuesta 200: **Tarea**.
 
 Errores:
 
-- 400 · `"Estado de tarea inválido"`
+- 400 · `"Estado de tarea invalido"`
 - 409 · `"Primero hay que completar: <nombre del paso anterior>"`
-- 409 · `"No se puede reabrir: el paso siguiente ya empezó"`
+- 409 · `"No se puede reabrir: el paso siguiente ya empezo"`
 
 ### DELETE /tareas/:id
 
@@ -926,7 +986,8 @@ Solo para tareas libres (sin `id_tipo_tarea`). Respuesta 204.
 ### GET /tareas/mias
 
 Tareas del empleado vinculado al usuario logueado (`id_empleado` del login), de
-eventos abiertos. Ordenadas: primero las vencidas, después por `fecha_prevista`.
+eventos abiertos. El `id_empleado` se lee de la tabla `usuarios` en cada pedido
+(no viaja en el token). Ordenadas: primero las vencidas, después por `fecha_prevista`.
 Filtro: `?estado_tarea=`.
 
 Respuesta 200: `[Tarea]`, con tres campos más:
@@ -950,6 +1011,12 @@ Si el usuario no está vinculado a un empleado, responde 200 con `[]`.
 Todo se calcula sobre **eventos abiertos** (`confirmado` o `en_preparacion`) de
 la empresa del usuario. Todos los endpoints aceptan `?dias=7|15|30` (por defecto
 30): la ventana de días hacia adelante para los "próximos".
+
+- `?dias` acepta cualquier entero de 1 a 365. Un valor inválido usa 30.
+- `?dias` **solo** afecta a los próximos (`eventos_proximos` y
+  `/proximos-eventos`). Las tareas vencidas y los servicios sin confirmar son
+  siempre de **todos** los eventos abiertos, en el resumen y en sus listas: así
+  el número de cada tarjeta coincide con el largo de su lista.
 
 ### GET /seguimiento/resumen
 
@@ -996,6 +1063,8 @@ Respuesta 200, ordenada por fecha:
 ```
 
 `porcentaje_avance` es un entero de 0 a 100. Vale 0 si no hay tareas.
+`total_tareas` cuenta todas las tareas del evento (de la secuencia y libres).
+`nombre_coordinador` es `null` si el evento no tiene coordinador.
 
 ### GET /seguimiento/tareas-vencidas
 
@@ -1039,15 +1108,18 @@ Body:
   `cancelada` en la misma transacción.
 - Se guarda `fecha_cierre` = hoy.
 - No se valida que todas las tareas estén completas: el front muestra un aviso,
-  pero la decisión es del usuario.
+  pero la decisión es del usuario. Tampoco se valida la fecha: se puede marcar
+  `realizado` antes de la fecha del evento.
+- Un motivo hecho solo de espacios cuenta como vacío. Al cerrar como
+  `realizado`, `observaciones_cierre` es opcional (si no viene, queda `null`).
 
 Respuesta 200: **Evento (detalle)**, con `editable: false`.
 
 Errores:
 
-- 400 · `"Estado de cierre inválido"`
+- 400 · `"Estado de cierre invalido"`
 - 400 · `"Para cancelar un evento hay que indicar el motivo"`
-- 409 · `"El evento ya está cerrado"`
+- 409 · `"El evento ya esta cerrado"`
 
 ### PATCH /eventos/:id/feedback
 
@@ -1060,7 +1132,8 @@ Body:
 }
 ```
 
-- Los dos campos son opcionales, pero tiene que venir al menos uno.
+- Los dos campos son opcionales, pero tiene que venir al menos uno con texto.
+  Solo se actualizan los que vienen; el otro conserva su valor.
 - Solo para eventos `realizado`. Es la única edición que se permite con el evento cerrado.
 
 Respuesta 200: **Evento (detalle)**.
@@ -1075,11 +1148,17 @@ Respuesta 200: **Evento (detalle)**.
 | Fecha | Fase | Cambio | Avisado al front |
 | --- | --- | --- | --- |
 | 2026-10-20 | 1 a 8 | Versión inicial completa, alineada con el `schema.sql` de la Fase 1 | ✔ |
+| 2026-10-20 | 3 | Mensajes de error sin tildes (`"El cliente no existe o esta inactivo"`, `"El tipo de evento no existe o esta inactivo"`, `"Estado invalido"`), como pide la convención. Se aclara que una fecha con formato inválido responde el 400 de obligatorios y que los filtros inválidos del listado se ignoran | ✘ |
+| 2026-10-20 | 4 | Mensajes sin tildes. Errores nuevos: 400 de `validez_dias`, 409 `"Solo se puede crear una nueva version desde la ultima version"` y 409 de solicitud cerrada al presentar o crear una versión. Al presentar, `fecha_emision` pasa a ser hoy. La nueva versión copia `validez_dias` y `observaciones`. Un proveedor inactivo responde "no ofrece ese servicio" | ✘ |
+| 2026-10-20 | 5 | Mensajes sin tildes (`"El evento esta cerrado..."`, `"...iniciar la preparacion..."`). Aceptar responde 409 `"La solicitud esta <estado> y no admite presupuestos"` si la solicitud está cerrada. Se aclara que el coordinador es opcional, que la validez vencida no impide aceptar y que el PUT reemplaza el objeto completo | ✘ |
+| 2026-10-20 | 6 | Mensajes sin tildes. Reabrir un paso completado se bloquea también hacia `en_curso` (no solo hacia `pendiente`) si el siguiente ya empezó. Se aclara: fecha de confirmación y de finalización se conservan si se repite el estado, `id_proveedor: null` desasigna, body vacío en el PATCH responde 200, dos pasos pueden tener la misma fecha | ✘ |
+| 2026-10-20 | 7 | Se aclara el alcance de `?dias` (solo los próximos; acepta de 1 a 365, inválido = 30) y que `total_tareas` incluye las tareas libres. Sin cambios en los campos | ✘ |
+| 2026-10-20 | 8 | Mensajes sin tildes. Se aclara: no se valida la fecha al marcar `realizado`, un texto hecho solo de espacios cuenta como vacío y el feedback es parcial | ✘ |
+| 2026-10-20 | 9 | Revisión final. Errores generales documentados (401, `:id` inválido → 404, `"Hay datos con un formato invalido"`, JSON inválido, `"Ruta no encontrada"`). Todo 500 responde `"Error interno del servidor"` (empresas y auth tenían textos propios). Mensajes exactos de obligatorios de los catálogos. `nombre_cliente` no agrega el `-` de los clientes empresa. Pendientes de la Fase 1 cerrados | ✘ |
 
 ### Pendientes del back sobre la Fase 1 ya implementada
 
-- [ ] `POST /auth/login` devuelve `usuario.id`; tiene que devolver
-      `usuario.id_usuario`, igual que `/auth/perfil` y el registro.
-- [ ] `src/data/db.js`: agregar los `setTypeParser` de fechas (1082) y montos (1700).
-- [ ] `DELETE /empresas/:id` con datos asociados: responder 409 en vez de 500
-      (capturar el error `23503`).
+- [x] `POST /auth/login` devuelve `usuario.id_usuario`, igual que `/auth/perfil`
+      y el registro.
+- [x] `src/data/db.js` tiene los `setTypeParser` de fechas (1082) y montos (1700).
+- [x] `DELETE /empresas/:id` con datos asociados responde 409 (error `23503`).

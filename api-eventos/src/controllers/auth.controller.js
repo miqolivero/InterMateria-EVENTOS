@@ -1,6 +1,7 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import pool from "../data/db.js";
+import { responderError } from "../utils/errores.js";
 
 // Los usuarios ya no viven en memoria: estan en la tabla usuarios. El cambio
 // era necesario porque el sistema es multitenant y cada usuario tiene que
@@ -47,11 +48,9 @@ export const registrar = async (req, res) => {
     // 5. Responder SIN la contrasena
     res.status(201).json(resultado.rows[0]);
   } catch (error) {
-    // 23505 = violacion de UNIQUE (el email ya esta registrado)
-    if (error.code === "23505") {
-      return res.status(400).json({ mensaje: "El email ya esta registrado" });
-    }
-    res.status(500).json({ mensaje: "Error al registrar el usuario" });
+    // 23505 = violacion de UNIQUE (el email ya esta registrado) -> 400.
+    // Cualquier otro error sale como el 500 generico del contrato.
+    responderError(res, error, { duplicado: "El email ya esta registrado" });
   }
 };
 
@@ -101,11 +100,13 @@ export const login = async (req, res) => {
       { expiresIn: process.env.JWT_EXPIRES_IN }
     );
 
-    // 4. Devolver el token y los datos publicos
+    // 4. Devolver el token y los datos publicos.
+    // El campo se llama id_usuario, igual que la columna y que lo que devuelve
+    // /auth/perfil: el front lee el mismo nombre en los dos lados.
     res.json({
       token,
       usuario: {
-        id: usuario.id_usuario,
+        id_usuario: usuario.id_usuario,
         nombre: usuario.nombre,
         email: usuario.email,
         rol: usuario.rol,
@@ -115,7 +116,7 @@ export const login = async (req, res) => {
       }
     });
   } catch (error) {
-    res.status(500).json({ mensaje: "Error al iniciar sesion" });
+    responderError(res, error);
   }
 };
 
@@ -139,6 +140,6 @@ export const perfil = async (req, res) => {
 
     res.json(resultado.rows[0]);
   } catch (error) {
-    res.status(500).json({ mensaje: "Error al obtener el perfil" });
+    responderError(res, error);
   }
 };

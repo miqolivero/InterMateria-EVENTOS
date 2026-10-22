@@ -1,8 +1,8 @@
 # Estado de integración
 
-Frontend desarrollado sobre `main` (`c681148`), contrastado con el contrato final
-de `origin/backend` (`a10ece7`). Este documento no modifica `docs/API.md` ni
-supone que el backend esté integrado en main.
+Backend del equipo (`origin/backend`, `72a7d53`) integrado localmente en
+`frontend` el 22/10/2026, junto con las correcciones visuales publicadas por el
+equipo. No se publicó ningún cambio en main.
 
 ## Qué está preparado
 
@@ -21,22 +21,21 @@ hacia pendiente o en_curso si el siguiente paso comenzó y feedback con texto.
 - `origin/back/fase-2`: implementación de catálogos.
 - `origin/backend`: implementación hasta la fase 9 y contrato revisado.
 
-No se fusionó la rama backend, no se modificaron controllers ni SQL y no se
-ejecutaron schema.sql o seed.sql sobre la base del usuario.
+La base local anterior se actualizó con `npm run db:actualizar`, después de
+generar un respaldo completo. Se conservaron las cuatro empresas y el cliente
+existentes; no se ejecutaron los DROP de schema.sql ni se cargó seed.sql.
 
 ## API real
 
 Dirección confirmada por el usuario: `http://localhost:3000/api`.
 
-La verificación previa de esa API local devolvió 200 en GET /empresas, mientras
-el login de la cuenta de demostración devolvió 500. Ese resultado corresponde a
-la copia ejecutada entonces; no demuestra un fallo del backend nuevo que está
-en otra rama. La prueba autenticada real debe repetirse con la implementación
-y los datos configurados por el responsable del backend.
-
-En la comprobación final, `localhost:3000` no respondió a las consultas de
-empresas, clientes o resumen de seguimiento. No se inició otro backend ni se
-cambió su configuración para resolverlo.
+Se reemplazó el proceso antiguo `nodemon index.js` por `npm start` dentro de
+`api-eventos`. La API actual responde en el puerto 3000 con el .env local.
+Se comprobaron registro (201), login y perfil (200), persistencia con hash y
+listados autenticados de clientes, tipos, servicios, proveedores, empleados,
+solicitudes, eventos, Mis tareas y las cuatro consultas del tablero (200).
+Sin token, clientes devuelve 401. Las cuentas temporales se eliminaron al
+terminar; no se dejaron usuarios ni datos de demostración.
 
 ## Verificaciones del frontend
 
@@ -55,8 +54,7 @@ cambió su configuración para resolverlo.
 
 ## Checklist de integración real
 
-1. El responsable del backend ejecuta su implementación y verifica su conexión
-   a la base. El frontend conserva la URL de .env; no cambia PostgreSQL.
+1. API local y conexión a la base verificadas. El frontend conserva la URL de .env.
 2. Login, perfil, registro y expiración de sesión. Validar roles admin/usuario.
 3. Alta/edición/baja lógica de los cinco catálogos; oferta de servicios de proveedor.
 4. Cliente → solicitud → presupuesto con dos versiones → aceptación → evento.
@@ -69,5 +67,6 @@ cambió su configuración para resolverlo.
 9. Usar una segunda empresa y confirmar que la API no devuelva ni modifique
    recursos de otra, incluso llamando rutas directamente.
 
-Hasta repetir este checklist con la API nueva, el estado es: frontend
-implementado y validado contra el contrato; integración real pendiente.
+Registro, login, perfil y consultas reales verificados. El circuito completo
+de operaciones, concurrencia y aislamiento entre empresas sigue pendiente de
+una prueba de integración dedicada; las comprobaciones de lectura no lo reemplazan.

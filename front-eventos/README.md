@@ -26,7 +26,7 @@ no ejecutar scripts SQL como paso para levantar este frontend.
 
 | Ruta | Funcionalidad |
 | --- | --- |
-| `/` | Listado público de empresas; con sesión redirige a Seguimiento |
+| `/` | Requiere sesión y redirige a Seguimiento |
 | `/login`, `/registro` | Acceso y registro con selección de empresa |
 | `/empresas` | Búsqueda, filtro de estado y administración por rol |
 | `/empresas/nueva`, `/empresas/:id/editar` | Formularios solo para admin; edición del estado activo |
@@ -40,9 +40,11 @@ no ejecutar scripts SQL como paso para levantar este frontend.
 | `/eventos/:id` | Resumen, servicios, tareas, cierre y feedback |
 | `/mis-tareas` | Tareas propias y cambio de estado con verificación de secuencia |
 | `/seguimiento` | Indicadores, próximos eventos, vencidas y servicios sin confirmar |
-| Otras rutas | Página 404 |
+| Otras rutas | Con sesión muestra la página 404; sin sesión redirige al login |
 
-Salvo el inicio, acceso y registro, las pantallas requieren sesión. El backend
+Solo acceso y registro son públicos; todas las demás rutas requieren sesión.
+Sin sesión, la aplicación redirige al login y conserva la dirección solicitada
+para volver después de iniciar sesión. El backend
 es quien aplica los permisos y el aislamiento por empresa. El frontend no envía
 `id_empresa` en formularios de negocio; solo lo usa en el registro de cuenta.
 

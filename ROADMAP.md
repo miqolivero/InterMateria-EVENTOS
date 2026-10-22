@@ -35,8 +35,9 @@ Front ── [pantallas N contra el contrato] ─────── [prueba N co
 
 - Cada uno toca **solo su carpeta**. `docs/API.md` lo modifica solo el back. Si
   el front necesita un cambio, lo pide por un issue o en el PR.
-- Ramas `back/fase-N` y `front/fase-N`. Se mergea a `main` por Pull Request y
-  **el otro lo revisa**. Así los dos conocen todo el sistema para la defensa.
+- Una rama por persona: `backend` y `frontend`. Al cerrar cada fase se mergea
+  a `main` por Pull Request y **el otro lo revisa**. Así los dos conocen todo
+  el sistema para la defensa. Lo del otro se trae desde `main`.
 - Un endpoint que ya está en el contrato **no se cambia sin avisar**.
 - Si cambia el modelo de datos, se actualiza el DER y los dos están de acuerdo.
 
@@ -421,7 +422,7 @@ falta resolver con varios eventos en paralelo.
 
 ## Checklist de cada PR
 
-- [ ] La rama corresponde a la fase (`back/fase-N` o `front/fase-N`).
+- [ ] El PR va de `backend` o `frontend` a `main` y cierra una fase completa.
 - [ ] Se probó al menos un caso de error (otra empresa, estado inválido, datos faltantes).
 - [ ] Back: las respuestas coinciden con `docs/API.md`. Front: `build` y `lint` pasan.
 - [ ] El README de la carpeta está actualizado.

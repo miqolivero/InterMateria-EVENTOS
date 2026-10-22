@@ -13,8 +13,8 @@ Cada fase lleva **dos sesiones**:
 
 ## Antes de cada sesión
 
-- Abrir la terminal en `api-eventos/` y crear la rama:
-  `git checkout -b back/fase-N`.
+- Abrir la terminal en `api-eventos/`, pararse en la rama `backend` y traer lo
+  último de `main`: `git checkout backend` y `git merge origin/main`.
 - Arrancar con una sesión limpia (`/clear`).
 - Activar el **modo plan** (Shift+Tab) para que proponga el plan antes de tocar
   archivos.

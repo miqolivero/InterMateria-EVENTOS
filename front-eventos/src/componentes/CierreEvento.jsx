@@ -19,7 +19,7 @@ export default function CierreEvento({ evento, actualizado }) {
   const abierto = evento.editable === true && ["confirmado", "en_preparacion"].includes(evento.estado);
   if (!abierto) return <Card><Result status={evento.estado === "realizado" ? "success" : "info"} title={evento.estado === "realizado" ? "Evento realizado" : "Evento cancelado"}
     subTitle={formatearFecha(evento.fecha_cierre)} />
-    <Descriptions column={1} items={[{ key: "obs", label: "Observaciones de cierre", children: evento.observaciones_cierre || "—" }]} />
+    <Descriptions className="observaciones-cierre" column={1} items={[{ key: "obs", label: "Observaciones de cierre", children: evento.observaciones_cierre || "—" }]} />
     {evento.estado === "realizado" && <Form form={feedback} layout="vertical" disabled={ocupado} initialValues={{ feedback_cliente: evento.feedback_cliente || "", observaciones_cierre: evento.observaciones_cierre || "" }}
       onFinish={async (v) => { const respuesta = await ejecutar(() => guardarFeedback(evento.id_evento, {
         observaciones_cierre: v.observaciones_cierre?.trim() || null, feedback_cliente: v.feedback_cliente?.trim() || null

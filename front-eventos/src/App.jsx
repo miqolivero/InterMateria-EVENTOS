@@ -2,7 +2,6 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { lazy, Suspense } from "react";
 import { Spin } from "antd";
 import RutaProtegida from "./componentes/RutaProtegida";
-import { useSesion } from "./contexto/useSesion";
 import "./App.css";
 
 // La tabla y las herramientas de cada pantalla se descargan cuando se necesitan.
@@ -22,17 +21,12 @@ const EventoDetalle = lazy(() => import("./paginas/Eventos").then((m) => ({ defa
 const MisTareas = lazy(() => import("./componentes/TareasEvento").then((m) => ({ default: m.MisTareas })));
 const Seguimiento = lazy(() => import("./paginas/Seguimiento"));
 
-function Inicio() {
-  const { usuario } = useSesion();
-  return usuario ? <Navigate to="/seguimiento" replace /> : <Empresas publico />;
-}
-
 export default function App() {
   return <Suspense fallback={<div className="pantalla-espera"><Spin size="large" /><p>Cargando tu espacio…</p></div>}><Routes>
-    <Route path="/" element={<Inicio />} />
     <Route path="/login" element={<Login />} />
     <Route path="/registro" element={<Registro />} />
     <Route element={<RutaProtegida><LayoutPrincipal /></RutaProtegida>}>
+      <Route path="/" element={<Navigate to="/seguimiento" replace />} />
       <Route path="/empresas" element={<Empresas />} />
       <Route path="/empresas/nueva" element={<RutaProtegida soloAdmin><EmpresaForm /></RutaProtegida>} />
       <Route path="/empresas/:id/editar" element={<RutaProtegida soloAdmin><EmpresaForm /></RutaProtegida>} />
@@ -46,7 +40,7 @@ export default function App() {
       <Route path="/clientes" element={<Catalogo recurso="clientes" />} />
       <Route path="/catalogos" element={<Catalogos />} />
       <Route path="/personal" element={<Catalogo recurso="empleados" />} />
+      <Route path="*" element={<NoEncontrada />} />
     </Route>
-    <Route path="*" element={<NoEncontrada />} />
   </Routes></Suspense>;
 }

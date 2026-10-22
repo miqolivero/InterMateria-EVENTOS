@@ -5,6 +5,7 @@
   "type": "module",
   "main": "src/index.js",
   "scripts": {
+    "db:actualizar": "node scripts/actualizar-base.js",
     "start": "node src/index.js",
     "dev": "node --watch src/index.js"
   },

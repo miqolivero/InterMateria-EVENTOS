@@ -5,3 +5,8 @@ button, input, select { font: inherit; }
 a { text-decoration: none; }
 ::selection { background: #dbeafe; }
 :focus-visible { outline: 2px solid #2563eb; outline-offset: 3px; }
+
+/* Separa las observaciones de cierre del formulario de feedback del evento realizado */
+.observaciones-cierre {
+  margin-bottom: 20px;
+}
