@@ -1,4 +1,4 @@
-import api from "./axiosConfig";
+import api from "./axiosConfig.js";
 
 export const login = (email, password) =>
   api.post("/auth/login", { email, password });
@@ -14,6 +14,9 @@ export const cerrarSesion = () => {
 };
 
 export const usuarioGuardado = () => {
-  const guardado = localStorage.getItem("usuario");
-  return guardado ? JSON.parse(guardado) : null;
+  try {
+    const guardado = localStorage.getItem("usuario");
+    const usuario = guardado ? JSON.parse(guardado) : null;
+    return usuario && typeof usuario === "object" && !Array.isArray(usuario) ? usuario : null;
+  } catch { return null; }
 };

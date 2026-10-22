@@ -1,7 +1,8 @@
 import axios from "axios";
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL
+  baseURL: import.meta.env?.VITE_API_URL,
+  timeout: 15000
 });
 
 // ANTES de cada peticion: agregar el token.
@@ -20,10 +21,15 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    // Un 401 en login es un error del formulario, no una sesión vencida.
+    const esAcceso = ["/auth/login", "/auth/register"].includes(error.config?.url);
+    const tokenActual = localStorage.getItem("token");
+    const autorizacionEnviada = error.config?.headers?.Authorization;
+    const esSesionActual = !tokenActual || autorizacionEnviada === `Bearer ${tokenActual}`;
+    if (error.response?.status === 401 && !esAcceso && esSesionActual) {
       localStorage.removeItem("token");
       localStorage.removeItem("usuario");
-      window.location.href = "/login";
+      window.dispatchEvent(new Event("sesion-expirada"));
     }
     return Promise.reject(error);
   }

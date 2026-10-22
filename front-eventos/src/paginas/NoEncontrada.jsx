@@ -1,15 +1,10 @@
 import { Link } from "react-router-dom";
-import "./NoEncontrada.css";
+import { Button, Result } from "antd";
 
 function NoEncontrada() {
   return (
-    <div className="no-encontrada">
-      <h1 className="no-encontrada-titulo">404</h1>
-      <p className="no-encontrada-texto">Esta pagina no existe.</p>
-      <Link className="no-encontrada-volver" to="/">
-        Volver al listado
-      </Link>
-    </div>
+    <Result status="404" title="No encontramos esta página" subTitle="Revisá la dirección o volvé a tu espacio de trabajo."
+      extra={<Link to="/"><Button type="primary">Volver al inicio</Button></Link>} />
   );
 }
 

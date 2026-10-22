@@ -1,190 +1,72 @@
-import { useEffect, useState } from "react";
-import { useNavigate, useParams, Link } from "react-router-dom";
-import {
-  obtenerEmpresa,
-  crearEmpresa,
-  actualizarEmpresa
-} from "../servicios/empresasService";
-import "./EmpresaForm.css";
+import { useCallback, useEffect, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { Alert, App, Button, Card, Col, Form, Input, Row, Skeleton, Space, Switch } from "antd";
+import { ArrowLeftOutlined, SaveOutlined } from "@ant-design/icons";
+import { obtenerEmpresa, crearEmpresa, actualizarEmpresa } from "../servicios/empresasService";
+import { mensajeError } from "../utils/errores";
+import EncabezadoPagina from "../componentes/EncabezadoPagina";
+import { useConsulta } from "../contexto/useConsulta";
 
-const FORMULARIO_VACIO = {
-  nombre: "",
-  cuit: "",
-  email: "",
-  telefono: "",
-  direccion: ""
-};
+const vacia = { nombre: "", cuit: "", email: "", telefono: "", direccion: "", activo: true };
 
-// El mismo componente sirve para crear y para editar: si la URL trae un id,
-// pide esa empresa y carga el formulario con sus datos.
-function EmpresaForm() {
+export default function EmpresaForm() {
   const { id } = useParams();
+  const [form] = Form.useForm();
+  const { message } = App.useApp();
   const navigate = useNavigate();
-  const editando = Boolean(id);
-
-  const [empresa, setEmpresa] = useState(FORMULARIO_VACIO);
-  const [cargando, setCargando] = useState(editando);
   const [error, setError] = useState("");
   const [guardando, setGuardando] = useState(false);
+  const consultar = useCallback(async () => id ? (await obtenerEmpresa(id)).data : vacia, [id]);
+  const { datos, cargando, error: errorConsulta, recargar } = useConsulta(consultar);
+  const falloCarga = Boolean(errorConsulta);
 
   useEffect(() => {
-    if (!editando) return;
+    if (datos && !cargando) form.setFieldsValue(Object.fromEntries(Object.keys(vacia).map((key) => [key, datos[key] ?? ""])));
+  }, [datos, cargando, form]);
 
-    const pedirEmpresa = async () => {
-      try {
-        const respuesta = await obtenerEmpresa(id);
-        const datos = respuesta.data;
-        setEmpresa({
-          nombre: datos.nombre ?? "",
-          cuit: datos.cuit ?? "",
-          email: datos.email ?? "",
-          telefono: datos.telefono ?? "",
-          direccion: datos.direccion ?? ""
-        });
-      } catch (err) {
-        if (err.response && err.response.status === 404) {
-          setError("No existe una empresa con ese id.");
-        } else {
-          setError("No se pudo cargar la empresa.");
-        }
-      } finally {
-        setCargando(false);
-      }
-    };
-
-    pedirEmpresa();
-  }, [id, editando]);
-
-  const manejarCambio = (evento) => {
-    const { name, value } = evento.target;
-    setEmpresa({ ...empresa, [name]: value });
-  };
-
-  const manejarEnvio = async (evento) => {
-    evento.preventDefault();
-    setError("");
-
-    // Validacion en el front: evita un viaje a la API que ya sabemos que falla.
-    // La API igual valida de nuevo, no se confia en el navegador.
-    if (!empresa.nombre.trim() || !empresa.cuit.trim()) {
-      setError("El nombre y el cuit son obligatorios.");
-      return;
-    }
-
-    setGuardando(true);
-
+  async function guardar(datos) {
+    if (guardando) return;
+    setGuardando(true); setError("");
+    const empresa = Object.fromEntries(Object.entries(datos).map(([key, valor]) => [key, typeof valor === "string" ? valor.trim() : valor]));
+    if (!id) delete empresa.activo;
     try {
-      if (editando) {
-        await actualizarEmpresa(id, empresa);
-      } else {
-        await crearEmpresa(empresa);
-      }
-      navigate("/");
-    } catch (err) {
-      if (err.response && err.response.status === 400) {
-        setError(err.response.data.mensaje || "Los datos enviados no son validos.");
-      } else if (err.response && err.response.status === 403) {
-        setError("No tenes permiso para esta accion.");
-      } else if (err.response && err.response.status === 404) {
-        setError("Esa empresa ya no existe.");
-      } else if (err.response) {
-        setError("La API respondio con un error al guardar.");
-      } else {
-        setError("No se pudo conectar con la API.");
-      }
-      setGuardando(false);
-    }
-  };
-
-  if (cargando) {
-    return <p className="formulario-mensaje">Cargando empresa...</p>;
+      if (id) await actualizarEmpresa(id, empresa); else await crearEmpresa(empresa);
+      message.success(id ? "Empresa actualizada." : "Empresa creada.");
+      navigate("/empresas");
+    } catch (err) { setError(mensajeError(err, "No se pudo guardar la empresa.")); }
+    finally { setGuardando(false); }
   }
 
-  return (
-    <section className="formulario">
-      <h1 className="formulario-titulo">
-        {editando ? "Editar empresa" : "Nueva empresa"}
-      </h1>
-
-      {error && <p className="formulario-error">{error}</p>}
-
-      <form className="formulario-campos" onSubmit={manejarEnvio}>
-        <label className="formulario-label">
-          Nombre *
-          <input
-            className="formulario-input"
-            type="text"
-            name="nombre"
-            value={empresa.nombre}
-            onChange={manejarCambio}
-            maxLength={150}
-          />
-        </label>
-
-        <label className="formulario-label">
-          CUIT *
-          <input
-            className="formulario-input"
-            type="text"
-            name="cuit"
-            value={empresa.cuit}
-            onChange={manejarCambio}
-            maxLength={13}
-            placeholder="30-71234567-8"
-          />
-        </label>
-
-        <label className="formulario-label">
-          Email
-          <input
-            className="formulario-input"
-            type="email"
-            name="email"
-            value={empresa.email}
-            onChange={manejarCambio}
-            maxLength={150}
-          />
-        </label>
-
-        <label className="formulario-label">
-          Telefono
-          <input
-            className="formulario-input"
-            type="text"
-            name="telefono"
-            value={empresa.telefono}
-            onChange={manejarCambio}
-            maxLength={30}
-          />
-        </label>
-
-        <label className="formulario-label">
-          Direccion
-          <input
-            className="formulario-input"
-            type="text"
-            name="direccion"
-            value={empresa.direccion}
-            onChange={manejarCambio}
-            maxLength={200}
-          />
-        </label>
-
-        <div className="formulario-acciones">
-          <button
-            className="formulario-guardar"
-            type="submit"
-            disabled={guardando}
-          >
-            {guardando ? "Guardando..." : "Guardar"}
-          </button>
-          <Link className="formulario-cancelar" to="/">
-            Cancelar
-          </Link>
-        </div>
-      </form>
-    </section>
-  );
+  return <>
+    <Link className="enlace-volver" to="/empresas"><ArrowLeftOutlined /> Volver a empresas</Link>
+    <EncabezadoPagina etiqueta="ORGANIZADORAS" titulo={id ? "Editar empresa" : "Nueva empresa"}
+      descripcion="Datos de identificación y contacto de la organizadora." />
+    <Card className="panel-formulario">
+      {(error || falloCarga) && <Alert className="aviso-formulario" type="error" showIcon role="alert" title={error || mensajeError(errorConsulta, "No se pudo cargar la empresa.")}
+        action={falloCarga && <Button size="small" onClick={recargar}>Reintentar</Button>} />}
+      {cargando ? <Skeleton active paragraph={{ rows: 8 }} /> : !falloCarga &&
+        <Form form={form} initialValues={vacia} layout="vertical" onFinish={guardar} disabled={guardando}>
+          <Row gutter={24}>
+            <Col xs={24} md={14}><Form.Item name="nombre" label="Nombre de la empresa" rules={[{ required: true, whitespace: true, message: "Ingresá el nombre de la empresa." }, { max: 150 }]}>
+              <Input placeholder="Ej. Eventos del Centro" maxLength={150} autoComplete="organization" />
+            </Form.Item></Col>
+            <Col xs={24} md={10}><Form.Item name="cuit" label="CUIT" rules={[{ required: true, whitespace: true, message: "Ingresá el CUIT." }, { max: 13 }]}>
+              <Input placeholder="30-12345678-9" maxLength={13} />
+            </Form.Item></Col>
+            <Col xs={24} md={12}><Form.Item name="email" label="Email de contacto" rules={[{ type: "email", message: "Ingresá un email válido." }, { max: 150 }]}>
+              <Input type="email" placeholder="contacto@empresa.com" maxLength={150} autoComplete="email" />
+            </Form.Item></Col>
+            <Col xs={24} md={12}><Form.Item name="telefono" label="Teléfono" rules={[{ max: 30 }]}>
+              <Input type="tel" placeholder="Ej. 351 4001122" maxLength={30} autoComplete="tel" />
+            </Form.Item></Col>
+            <Col span={24}><Form.Item name="direccion" label="Dirección" rules={[{ max: 200 }]}>
+              <Input placeholder="Calle, número y localidad" maxLength={200} autoComplete="street-address" />
+            </Form.Item></Col>
+          </Row>
+          {id && <Form.Item name="activo" label="Empresa activa" valuePropName="checked"><Switch /></Form.Item>}
+          <div className="acciones-formulario"><Space><Button type="primary" htmlType="submit" loading={guardando} icon={<SaveOutlined />}>Guardar empresa</Button>
+            <Link to="/empresas"><Button disabled={guardando}>Cancelar</Button></Link></Space></div>
+        </Form>}
+    </Card>
+  </>;
 }
-
-export default EmpresaForm;
