@@ -1,5 +1,6 @@
 /* Una franja de color arriba del menú lateral distingue el panel del sistema
    del panel de una empresa. */
-.layout-superadmin .barra-lateral { border-top: 3px solid #2f54eb; }
+/* Sombra interna en lugar de borde: no corre la marca y la línea del header sigue alineada */
+.layout-superadmin .barra-lateral { box-shadow: inset 0 3px 0 #2f54eb; }
 .cabecera-superadmin { display: flex; align-items: center; gap: 10px; }
 @media (max-width: 480px) { .etiqueta-metricas { display: none; } }

@@ -1,6 +1,8 @@
 .layout-principal { min-height: 100vh; }
-.barra-lateral { border-right: 1px solid #e5e5e5; }
-.marca { display: flex; align-items: center; gap: 10px; color: #262626; padding: 20px; height: 64px; font-size: 18px; font-weight: 600; line-height: 1; }
+/* La barra lateral ocupa todo el alto de la pantalla y queda fija al scrollear */
+.barra-lateral { border-right: 1px solid #e5e5e5; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
+/* Misma altura y misma línea inferior que el header, para que queden alineados */
+.marca { display: flex; align-items: center; gap: 10px; color: #262626; padding: 0 20px; height: 64px; border-bottom: 1px solid #e5e5e5; font-size: 18px; font-weight: 600; line-height: 1; }
 .marca-icono { font-size: 22px; flex-shrink: 0; }
 .cabecera-principal { background: #fff; display: flex; align-items: center; justify-content: space-between; padding: 0 24px; height: 64px; line-height: normal; border-bottom: 1px solid #e5e5e5; gap: 12px; }
 .empresa-cabecera { max-width: 340px; }
