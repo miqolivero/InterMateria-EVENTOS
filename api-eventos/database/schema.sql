@@ -63,24 +63,43 @@ CREATE TABLE empleados (
 -- =============================================================================
 -- 3. Usuarios del sistema (login)
 -- =============================================================================
--- id_empresa es NOT NULL: todo usuario pertenece a una empresa y ese id viaja
--- en el token. Es la base de todo el filtrado multitenant.
--- id_empleado es opcional: hay usuarios administrativos que no estan cargados
--- como empleados. Se usa en la pantalla "Mis tareas" (fase 7).
+-- Cuatro roles (Fase 10):
+--   superadmin  -> los duenos del sistema. No pertenece a ninguna empresa, por
+--                  eso id_empresa es NULL. Solo ve metricas.
+--   admin, coordinador, empleado -> usuarios de UNA empresa. id_empresa es
+--                  obligatorio: ese id viaja en el token y filtra todo.
+-- id_empleado vincula el usuario con su ficha de personal. Es obligatorio para
+-- el rol empleado (sin eso no tiene tareas) y opcional para el resto (un socio
+-- puede ser admin sin estar cargado como empleado).
+-- debe_cambiar_password es TRUE cuando la contrasena la puso otra persona
+-- (alta o reset): el front obliga a cambiarla en el primer ingreso.
 CREATE TABLE usuarios (
     id_usuario SERIAL PRIMARY KEY,
     nombre VARCHAR(100) NOT NULL,
     email VARCHAR(150) NOT NULL UNIQUE,
     password VARCHAR(100) NOT NULL,
-    rol VARCHAR(20) NOT NULL DEFAULT 'usuario'
-        CHECK (rol IN ('admin', 'usuario')),
-    id_empresa INTEGER NOT NULL REFERENCES empresas(id_empresa),
+    rol VARCHAR(20) NOT NULL
+        CHECK (rol IN ('superadmin', 'admin', 'coordinador', 'empleado')),
+    id_empresa INTEGER REFERENCES empresas(id_empresa),
     id_empleado INTEGER REFERENCES empleados(id_empleado),
+    debe_cambiar_password BOOLEAN NOT NULL DEFAULT FALSE,
     activo BOOLEAN NOT NULL DEFAULT TRUE,
-    fecha_creacion TIMESTAMP NOT NULL DEFAULT NOW()
+    fecha_creacion TIMESTAMP NOT NULL DEFAULT NOW(),
+    -- El superadmin no tiene empresa ni empleado; cualquier otro rol si tiene empresa
+    CONSTRAINT chk_usuarios_empresa CHECK (
+        (rol = 'superadmin' AND id_empresa IS NULL AND id_empleado IS NULL)
+        OR (rol <> 'superadmin' AND id_empresa IS NOT NULL)
+    ),
+    -- Un usuario empleado siempre esta vinculado a un empleado (regla 10)
+    CONSTRAINT chk_usuarios_empleado CHECK (rol <> 'empleado' OR id_empleado IS NOT NULL)
 );
 
 CREATE INDEX idx_usuarios_empresa ON usuarios(id_empresa);
+
+-- Un empleado tiene a lo sumo un usuario (regla 10). Es parcial porque muchos
+-- usuarios no tienen empleado (id_empleado NULL) y esos no chocan entre si.
+CREATE UNIQUE INDEX uq_usuarios_empleado ON usuarios(id_empleado)
+    WHERE id_empleado IS NOT NULL;
 
 -- =============================================================================
 -- 4. Tipos de evento (catalogo por empresa)
@@ -256,7 +275,10 @@ CREATE TABLE eventos (
                           'realizado', 'cancelado')),
     observaciones_cierre TEXT,
     feedback_cliente TEXT,
-    fecha_cierre DATE
+    fecha_cierre DATE,
+    -- Cuando se acepto el presupuesto. Lo usa la metrica ultimo_evento_creado
+    -- del panel de superadmin (Fase 10).
+    fecha_creacion TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX idx_eventos_empresa ON eventos(id_empresa);

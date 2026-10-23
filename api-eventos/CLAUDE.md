@@ -28,6 +28,26 @@ Node 18+, Express 4, ES Modules (`"type": "module"`), `pg`, `dotenv`, `cors`,
   - `409` no se puede borrar porque tiene registros asociados (error `23503`),
     o la acción no es válida para el estado actual.
   - `500` error inesperado, con un mensaje genérico.
+- **Niveles de acceso** (Fase 10), con middlewares en `auth.middleware.js`:
+  - `soloEmpresa`: va en **todas** las rutas de empresa. Rechaza al
+    superadmin (403) y verifica en la base que la empresa siga activa (403
+    si está suspendida). Por eso un token viejo deja de servir apenas se
+    suspende la empresa.
+  - `soloSuperadmin`: va en las rutas `/superadmin/*`.
+  - `permitirRoles(...roles)`: aplica la tabla de permisos por ruta de
+    `docs/API.md`. Se monta en `index.js` por grupo de rutas y, donde el
+    permiso cambia por endpoint, en el router. Reemplaza al `verificarRol` de
+    antes.
+  - Las restricciones **por registro** del rol `empleado` (solo sus tareas y
+    sus servicios) van en el controller, dentro del `WHERE`, no en el
+    middleware. Si no le corresponde, 404, igual que con otra empresa.
+  - Nunca devolver importes ni costos en una respuesta para el rol `empleado`.
+  - Se montan **a nivel router** en `index.js`
+    (`app.use("/api/clientes", verificarToken, soloEmpresa, clientesRoutes)`),
+    no endpoint por endpoint. Así ninguna ruta nueva queda sin protección por
+    olvido.
+  - El superadmin no tiene `id_empresa`: **nunca** usar su token en una
+    consulta de datos operativos.
 - **Multitenant**: toda consulta filtra por `req.usuario.id_empresa`, que sale
   del token y **nunca del body o de la URL**. Si llega un id de otra tabla (por
   ejemplo `id_cliente` en una solicitud), verificar que sea de la misma empresa.

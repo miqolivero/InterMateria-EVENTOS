@@ -1,13 +1,13 @@
-import { ArrowLeftOutlined } from "@ant-design/icons";
-import { Link } from "react-router-dom";
 import "./MarcoAcceso.css";
 
-export default function MarcoAcceso({ children }) {
+// Marco de las pantallas sin menú: el login y el cambio de contraseña.
+// Fase 10: ya no hay listado público de empresas, así que no hay a dónde volver.
+export default function MarcoAcceso({ children, pie }) {
   return <main className="marco-acceso">
-    <Link className="acceso-marca" to="/">Sistema de Eventos</Link>
+    <span className="acceso-marca">Sistema de Eventos</span>
     <section className="acceso-panel">
       <div className="acceso-formulario">{children}</div>
     </section>
-    <Link className="acceso-volver" to="/"><ArrowLeftOutlined /> Volver a empresas</Link>
+    {pie}
   </main>;
 }

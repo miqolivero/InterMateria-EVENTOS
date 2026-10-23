@@ -250,3 +250,54 @@ para que "hoy" no dependa de la zona horaria del servidor.
 - **Mensajes de error sin tildes**, como pide la convención del contrato. El
   front muestra el mensaje tal cual y decide por el código HTTP, nunca por el
   texto.
+
+## 11. El superadmin solo ve métricas (Fase 10)
+
+El panel de superadmin muestra los datos de contacto de cada empresa y
+**cantidades** (usuarios, empleados, clientes, eventos abiertos y realizados),
+nunca un cliente, una solicitud, un evento o una tarea. Todas sus consultas son
+`COUNT` y `MAX` (`superadmin.controller.js`), y el middleware `soloEmpresa`
+rechaza su token en cualquier ruta de datos operativos.
+
+**Por qué:** los datos de los clientes de cada empresa son de esa empresa, no
+nuestros. Para operar el sistema (dar de alta una organizadora, suspenderla,
+ayudar a un usuario que perdió la contraseña) no hace falta verlos, así que
+no los vemos. Es el principio de mínimo privilegio aplicado a nosotros mismos.
+Además, el superadmin no tiene `id_empresa`: si se colara en una consulta
+operativa, el filtro multitenant quedaría con `NULL`.
+
+## 12. Las cuentas las crea la empresa, no hay registro público (Fase 10)
+
+Se eliminaron `POST /auth/register` y el listado público de empresas. El
+superadmin crea la empresa junto con su admin (en una transacción), y el admin
+da de alta a su personal en "Personal", eligiendo el rol de cada uno. Quien
+recibe una contraseña puesta por otro la tiene que cambiar al entrar
+(`debe_cambiar_password`).
+
+**Por qué:** con el registro público cualquiera podía crearse un usuario en la
+empresa que eligiera de una lista, y esa lista revelaba qué empresas usan el
+sistema. Ninguna empresa debería saber que existen las otras. Además, el que
+sabe quién trabaja en la empresa es su admin: es quien tiene que decidir quién
+entra y con qué permiso. La contraseña temporal obligatoria evita que el admin
+conozca la contraseña definitiva de sus empleados.
+
+## 13. El empleado no ve importes (Fase 10)
+
+El rol `empleado` solo ve sus tareas, con los datos del evento y del proveedor
+que necesita para trabajar, pero ningún costo ni importe. Se garantiza en tres
+capas:
+
+1. **Por ruta:** solo llega a login, perfil, cambio de contraseña, Mi empresa,
+   `/tareas/mias`, `PATCH /tareas/:id/estado` y `PATCH /servicios-evento/:id`.
+   Todo lo demás responde 403 (`permitirRoles` en `index.js`).
+2. **Por consulta:** esas respuestas se arman campo por campo con
+   `json_build_object`, sin `SELECT *`, así una columna nueva no se cuela.
+3. **Por registro:** el filtro "solo lo suyo" va en el `WHERE` (una tarea de
+   otro responde 404, igual que una de otra empresa). Si mandara un campo de
+   importes en el PATCH del servicio, responde 403 antes de mirar la base.
+
+**Por qué:** los márgenes de la empresa (lo que paga al proveedor y lo que
+cobra al cliente) son información comercial sensible, y al empleado no le
+hacen falta para su jornada. El filtro va en el `WHERE` y no en un `if`
+después de la consulta porque así es imposible que la fila ajena llegue al
+código: no hay un camino que se olvide de chequear.

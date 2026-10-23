@@ -1,0 +1,6 @@
+.menu-usuario { display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 8px; }
+.menu-usuario-nombre { font-weight: 600; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.menu-usuario-rol { margin-inline-end: 0; }
+.menu-usuario-flecha { font-size: 10px; color: #8c8c8c; }
+.menu-usuario-datos { display: flex; flex-direction: column; line-height: 1.4; cursor: default; }
+@media (max-width: 767px) { .menu-usuario-nombre, .menu-usuario-flecha { display: none; } }

@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
-import { Button, Card, Form, Input, Modal, Popconfirm, Select, Space, Table, Tabs, Tag } from "antd";
+import { Button, Card, Divider, Form, Input, Modal, Popconfirm, Select, Space, Switch, Table, Tabs, Tag, Typography } from "antd";
 import { PlusOutlined, ReloadOutlined } from "@ant-design/icons";
-import { listarCatalogo, obtenerCatalogo, crearCatalogo, editarCatalogo, activarCatalogo, obtenerServiciosProveedor, guardarServiciosProveedor } from "../servicios/catalogosService.js";
+import { listarCatalogo, obtenerCatalogo, crearCatalogo, editarCatalogo, activarCatalogo, obtenerServiciosProveedor, guardarServiciosProveedor, darAcceso } from "../servicios/catalogosService.js";
 import { useConsulta } from "../contexto/useConsulta.js";
 import { useAccion } from "../contexto/useAccion.js";
 import { catalogos } from "../utils/catalogos.js";
@@ -10,6 +10,37 @@ import { formatearFecha } from "../utils/formato.js";
 import EncabezadoPagina from "../componentes/EncabezadoPagina";
 import ErrorConsulta from "../componentes/ErrorConsulta";
 import FormularioCatalogo from "../componentes/FormularioCatalogo";
+import { EtiquetaRol } from "../componentes/TablaUsuarios";
+import { opcionesRol, reglasPassword } from "../utils/usuarios.js";
+
+// Acceso al sistema de un empleado (Fase 10). Los mismos campos sirven en el
+// alta de Personal (dentro del bloque "acceso") y en "Dar acceso".
+// El rol de acá es el PERMISO en el sistema; el "Rol laboral" de la ficha es
+// el puesto, en texto libre. Son cosas distintas.
+function CamposAcceso({ grupo }) {
+  const nombre = (campo) => grupo ? [grupo, campo] : campo;
+  return <>
+    <Form.Item name={nombre("email")} label="Email para entrar" rules={[{ required: true, message: "Completá el email." }, { type: "email", message: "Email inválido." }]}>
+      <Input type="email" autoComplete="off" /></Form.Item>
+    <Form.Item name={nombre("password")} label="Contraseña temporal" extra="Al entrar por primera vez va a tener que cambiarla." rules={reglasPassword}>
+      <Input.Password autoComplete="new-password" /></Form.Item>
+    <Form.Item name={nombre("rol")} label="Permiso en el sistema" rules={[{ required: true, message: "Elegí el rol." }]}>
+      <Select options={opcionesRol()} /></Form.Item>
+  </>;
+}
+
+function DarAcceso({ empleado, cerrar, actualizado }) {
+  const [form] = Form.useForm();
+  const { ocupado, ejecutar } = useAccion();
+  return <Modal open title={`Dar acceso a ${nombreCompleto(empleado)}`} okText="Dar acceso" cancelText="Cancelar" destroyOnHidden
+    onCancel={ocupado ? undefined : cerrar} onOk={() => form.submit()} confirmLoading={ocupado}>
+    <Form form={form} layout="vertical" disabled={ocupado} initialValues={{ email: empleado.email || "", rol: "empleado" }}
+      onFinish={async (v) => {
+        const r = await ejecutar(() => darAcceso(empleado.id_empleado, { email: v.email.trim(), password: v.password, rol: v.rol }), "Acceso creado.");
+        if (r.ok) { cerrar(); actualizado(); }
+      }}><CamposAcceso /></Form>
+  </Modal>;
+}
 
 function ServiciosProveedor({ proveedor, cerrar, actualizado }) {
   const [seleccion, setSeleccion] = useState(null);
@@ -41,11 +72,18 @@ export default function Catalogo({ recurso, sinTitulo = false }) {
   const consulta = useConsulta(useCallback(async () => (await listarCatalogo(recurso, { buscar, ...(activo === "todos" ? {} : { activo }) })).data, [recurso, buscar, activo]));
   const [editor, setEditor] = useState(null);
   const [proveedor, setProveedor] = useState(null);
+  const [acceso, setAcceso] = useState(null);
   const [form] = Form.useForm();
+  const conAcceso = Form.useWatch("dar_acceso", form);
+  const altaDePersonal = recurso === "empleados" && editor !== null && !editor.id_empleado;
   const { ocupado, ejecutar } = useAccion();
   async function guardar(valores) {
     const datos = camposPermitidos(valores, config.campos.map(([nombre]) => nombre));
     if (recurso === "empleados") datos.fecha_inicio = fechaAPI(valores.fecha_inicio);
+    // Alta con acceso: la API crea el empleado y su usuario en una transaccion
+    if (altaDePersonal && valores.dar_acceso) {
+      datos.acceso = { email: valores.acceso.email.trim(), password: valores.acceso.password, rol: valores.acceso.rol };
+    }
     const respuesta = await ejecutar(() => editor[config.id] ? editarCatalogo(recurso, editor[config.id], datos) : crearCatalogo(recurso, datos));
     if (respuesta.ok) { setEditor(null); consulta.recargar(); }
   }
@@ -61,11 +99,14 @@ export default function Catalogo({ recurso, sinTitulo = false }) {
     ]),
     ...(recurso === "clientes" ? [{ title: "DNI / CUIT", dataIndex: "dni_cuit" }] : []),
     ...(recurso === "proveedores" ? [{ title: "Servicios", dataIndex: "servicios", render: (servicios) => servicios?.map((s) => s.nombre).join(", ") || "Sin asignar" }] : []),
-    ...(recurso === "empleados" ? [{ title: "Cargo", dataIndex: "cargo" }, { title: "Ingreso", dataIndex: "fecha_inicio", render: formatearFecha }] : []),
+    ...(recurso === "empleados" ? [{ title: "Cargo", dataIndex: "cargo" }, { title: "Ingreso", dataIndex: "fecha_inicio", render: formatearFecha },
+      { title: "Acceso", dataIndex: "acceso", render: (a) => a ? <Space size={4} wrap><EtiquetaRol rol={a.rol} />{!a.activo && <Tag variant="outlined">Inactivo</Tag>}</Space>
+        : <Typography.Text type="secondary">Sin acceso</Typography.Text> }] : []),
     { title: "Estado", dataIndex: "activo", render: (v) => <Tag color={v ? "green" : "default"}>{v ? "Activo" : "Inactivo"}</Tag> },
     { title: "Acciones", key: "acciones", render: (_, fila) => <Space wrap>
       <Button size="small" disabled={ocupado} onClick={() => editar(fila)}>Editar</Button>
       {recurso === "proveedores" && <Button size="small" disabled={ocupado} onClick={() => setProveedor(fila)}>Servicios</Button>}
+      {recurso === "empleados" && !fila.acceso && fila.activo && <Button size="small" disabled={ocupado} onClick={() => setAcceso(fila)}>Dar acceso</Button>}
       <Popconfirm title={fila.activo ? `¿Desactivar este ${config.singular}?` : `¿Activar este ${config.singular}?`}
         okText="Confirmar" cancelText="Cancelar" onConfirm={async () => {
           const respuesta = await ejecutar(() => activarCatalogo(recurso, fila[config.id], !fila.activo));
@@ -85,9 +126,16 @@ export default function Catalogo({ recurso, sinTitulo = false }) {
       pagination={{ pageSize: 10, hideOnSinglePage: true }} locale={{ emptyText: consulta.error ? "No se pudo cargar el listado" : "Sin registros" }} /></Card>
     <Modal open={editor !== null} title={`${editor?.[config.id] ? "Editar" : "Nuevo"} ${config.singular}`}
       onCancel={ocupado ? undefined : () => setEditor(null)} onOk={() => form.submit()} okText="Guardar" cancelText="Cancelar" confirmLoading={ocupado} destroyOnHidden>
-      {editor !== null && <FormularioCatalogo recurso={recurso} datos={editor} form={form} guardar={guardar} ocupado={ocupado} />}
+      {editor !== null && <FormularioCatalogo recurso={recurso} datos={editor} form={form} guardar={guardar} ocupado={ocupado}>
+        {altaDePersonal && <>
+          <Divider />
+          <Form.Item name="dar_acceso" label="Darle acceso al sistema" valuePropName="checked"><Switch /></Form.Item>
+          {conAcceso && <CamposAcceso grupo="acceso" />}
+        </>}
+      </FormularioCatalogo>}
     </Modal>
     {proveedor && <ServiciosProveedor proveedor={proveedor} cerrar={() => setProveedor(null)} actualizado={consulta.recargar} />}
+    {acceso && <DarAcceso empleado={acceso} cerrar={() => setAcceso(null)} actualizado={consulta.recargar} />}
   </>;
 }
 

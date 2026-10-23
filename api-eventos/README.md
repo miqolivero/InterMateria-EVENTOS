@@ -43,7 +43,7 @@ psql -U postgres -d eventos -v ON_ERROR_STOP=1 --single-transaction -f database/
   `UNIQUE`, los `CHECK` de cada estado y los índices. **Arranca borrando todas
   las tablas del sistema**, así que se puede volver a correr las veces que haga
   falta, pero nunca sobre datos que no se quieran perder.
-- **`seed.sql`** carga los datos de prueba y de demo: las 3 empresas, los 4 tipos
+- **`seed.sql`** carga los datos de prueba y de demo: las 4 empresas (una suspendida), los 4 tipos
   de tarea, los usuarios y un circuito completo en las empresas 1 y 2 (ver
   abajo). La empresa 3 queda vacía, para mostrar el sistema "de cero".
 
@@ -106,45 +106,70 @@ Servidor en `http://localhost:3000`.
 
 ## Endpoints
 
+### Permisos (Fase 10)
+
+Cuatro roles: `superadmin` (los dueños del sistema, sin empresa), y en cada
+empresa `admin`, `coordinador` y `empleado`. La tabla completa de permisos por
+ruta está en `docs/API.md` y se aplica en `src/index.js`, por grupo de rutas:
+
+| Middleware | Qué hace |
+| --- | --- |
+| `verificarToken` | Firma y vencimiento del token → 401 |
+| `soloEmpresa` | Rechaza al superadmin (403), corta a los usuarios de una empresa suspendida (403 con `codigo: "empresa_suspendida"`) y lee de la base el rol, la empresa y el empleado actuales |
+| `soloSuperadmin` | Solo el superadmin entra a `/superadmin/*` |
+| `permitirRoles(...)` | Aplica la tabla de permisos → 403 `"No tenes permiso para esta accion"` |
+
+El rol `empleado` además queda limitado a **sus** tareas y a los servicios
+donde tiene tareas, con el filtro en el `WHERE` del controller (si no le
+corresponde, 404). Nunca recibe importes ni costos.
+
 ### Autenticación · `/api/auth`
 
 | Método | Ruta | Acción | Respuesta |
 | --- | --- | --- | --- |
-| POST | `/register` | Crear un usuario | 201 / 400 |
-| POST | `/login` | Obtener el token | 200 / 401 |
-| GET | `/perfil` | Datos del usuario del token | 200 / 401 / 404 |
+| POST | `/login` | Obtener el token | 200 / 401 / 403 (empresa suspendida) |
+| GET | `/perfil` | Datos del usuario del token | 200 / 401 / 403 / 404 |
+| PUT | `/password` | Cambiar la propia contraseña | 200 / 400 |
 
-`POST /register` espera `{ nombre, email, password, id_empresa }`. La empresa
-tiene que existir y estar activa; si no, responde 400. El email es único: si se
-repite, también 400. Todo usuario nuevo nace con `rol: "usuario"`.
+No hay registro público: las cuentas las crean el superadmin y el admin de cada
+empresa. `POST /login` devuelve `{ token, usuario }`, con
+`debe_cambiar_password` en `true` si la contraseña la puso otra persona.
 
-`POST /login` devuelve `{ token, usuario }`, donde `usuario` trae `id_usuario`,
-`nombre`, `email`, `rol`, `id_empresa`, `nombre_empresa` e `id_empleado`.
+El payload del token es `{ id, email, rol, id_empresa }`, pero los middlewares
+vuelven a leer el usuario de la base en cada pedido: un cambio de rol o una
+suspensión corren desde el pedido siguiente. El `id_empresa` con el que se
+filtra sale de ahí, **nunca del body ni de la URL**.
 
-El payload del token es `{ id, email, rol, id_empresa }`: de ahí sale el
-`id_empresa` con el que los controladores filtran los datos, **nunca del body ni
-de la URL**. Ese token se manda en las rutas protegidas con el header
-`Authorization: Bearer <token>`.
+### Panel de superadmin · `/api/superadmin`
 
-### Empresas · `/api/empresas`
+| Método | Ruta | Acción |
+| --- | --- | --- |
+| GET | `/resumen` | Métricas de todo el sistema |
+| GET | `/empresas?activo=&buscar=` | Empresas con sus métricas |
+| GET | `/empresas/:id` | Una empresa, sus métricas y sus usuarios |
+| POST | `/empresas` | Empresa y su admin, en una transacción |
+| PUT | `/empresas/:id` | Editar (incluido el cuit) |
+| PATCH | `/empresas/:id/activo` | Suspender o reactivar |
+| DELETE | `/empresas/:id` | Solo sin datos (si no, 409) |
+| POST | `/empresas/:id/usuarios` | Soporte: crear un admin o coordinador |
+| PATCH | `/empresas/:id/usuarios/:idUsuario` | Soporte: rol y/o activo |
+| PUT | `/empresas/:id/usuarios/:idUsuario/password` | Soporte: resetear la contraseña |
 
-| Método | Ruta | Acción | Acceso | Respuesta |
-| --- | --- | --- | --- | --- |
-| GET | `/` | Listar todas | Público | 200 |
-| GET | `/:id` | Obtener una | Público | 200 / 404 |
-| POST | `/` | Crear | Solo admin | 201 / 400 / 401 / 403 |
-| PUT | `/:id` | Editar | Solo admin | 200 / 400 / 401 / 403 / 404 |
-| DELETE | `/:id` | Eliminar | Solo admin | 204 / 401 / 403 / 404 |
+Solo cantidades: ninguna consulta devuelve clientes, eventos ni tareas.
 
-El listado sigue siendo **público** porque lo usa la pantalla de registro para
-llenar el select de empresas, cuando todavía no hay token. Dar de alta, editar o
-borrar una empresa, en cambio, es crear o tocar un tenant del sistema: eso queda
-**solo para admin**.
+### Mi empresa y usuarios · `/api/mi-empresa`, `/api/usuarios`
 
-`nombre` y `cuit` son obligatorios al crear y al editar. El `id` lo genera la
-base (`SERIAL`). El `cuit` es único: si se repite, la respuesta es 400. Borrar
-una empresa que ya tiene usuarios, clientes o eventos responde **409**: hay que
-desactivarla, no eliminarla. Cualquier ruta inexistente responde 404.
+- `GET /mi-empresa` (los tres roles de empresa) y `PUT /mi-empresa` (admin; el
+  cuit se ignora).
+- `/usuarios` (solo admin): listar con `?activo=&rol=&buscar=`, obtener, crear,
+  editar, `PATCH /:id/activo` y `PUT /:id/password` (reset).
+- Reglas (en `src/utils/usuarios.js`, compartidas con el superadmin y con
+  Personal): siempre queda un admin activo, un admin no se desactiva ni se
+  quita el rol a sí mismo, un usuario `empleado` siempre tiene empleado, y un
+  empleado tiene a lo sumo un usuario.
+- Personal con acceso: `POST /empleados` acepta el bloque `acceso` (empleado,
+  vínculo y usuario en una transacción), `POST /empleados/:id/acceso` da acceso
+  a uno que ya existe, y dar de baja a un empleado desactiva su usuario.
 
 ### Catálogos · clientes, tipos de evento, servicios, proveedores y empleados
 
@@ -369,29 +394,37 @@ seguridad, `errores.js` traduce a 400 los errores de formato de PostgreSQL.
 
 ## Usuarios
 
-Los usuarios viven en la tabla `usuarios` de la base, no en memoria: el sistema
-es multitenant y cada usuario tiene que estar atado a una empresa. Las
-contraseñas se guardan hasheadas con bcrypt, nunca en texto plano.
-
-`id_empleado` es opcional y vincula al usuario con una fila de `empleados`. Es lo
-que después permite mostrarle "sus" tareas.
+Los usuarios viven en la tabla `usuarios`. Las contraseñas se guardan hasheadas
+con bcrypt, nunca en texto plano. `id_empleado` vincula al usuario con su ficha
+de personal: es obligatorio para el rol `empleado`.
 
 ### Usuarios de prueba
 
-Los carga `seed.sql`. **La contraseña de todos es `admin123`.**
+Los carga `seed.sql`. **La contraseña de todos es `admin123`.** Los marcados con
+* tienen que cambiarla en el primer ingreso.
 
-| Email | Rol | Empresa | Empleado |
+| Email | Rol | Empresa | Para probar |
 | --- | --- | --- | --- |
-| `admin@eventosdelcentro.com` | admin | 1 · Eventos del Centro | Laura Giménez |
-| `usuario@eventosdelcentro.com` | usuario | 1 · Eventos del Centro | Martín Ríos |
-| `admin@fiestasnorte.com` | admin | 2 · Fiestas Norte | Nadia Paz |
-| `usuario@fiestasnorte.com` | usuario | 2 · Fiestas Norte | — |
-| `admin@produccionessur.com` | admin | 3 · Producciones Sur | — |
-| `usuario@produccionessur.com` | usuario | 3 · Producciones Sur | — |
+| `soporte@eventosapp.com` | superadmin | — | Panel del sistema |
+| `miqueas@eventosapp.com` * | superadmin | — | Panel del sistema (dueño) |
+| `admin@eventosdelcentro.com` | admin | 1 · Eventos del Centro | Todo, más Personal, Usuarios y Mi empresa |
+| `usuario@eventosdelcentro.com` | coordinador | 1 · Eventos del Centro | Toda la operación |
+| `carla@eventosdelcentro.com` * | empleado | 1 · Eventos del Centro | Panel del empleado (Carla Vega, tareas con proveedor y libres) |
+| `admin@fiestasnorte.com` | admin | 2 · Fiestas Norte | Aislamiento entre empresas |
+| `usuario@fiestasnorte.com` | coordinador | 2 · Fiestas Norte | |
+| `admin@produccionessur.com` | admin | 3 · Producciones Sur | |
+| `usuario@produccionessur.com` | coordinador | 3 · Producciones Sur | |
+| `admin@saloneslago.com` | admin | 4 · Salones del Lago (**suspendida**) | Login rechazado con 403 |
 
-La empresa 1 es la que tiene más datos cargados: es la que conviene usar
-para la demo. Para probar el aislamiento entre empresas, entrar con un usuario de
-la empresa 2 e intentar acceder a un registro de la 1.
+La empresa 1 es la que tiene más datos cargados: es la que conviene usar para la
+demo.
+
+**Base ya instalada:** `npm run db:actualizar` aplica los cambios de la Fase 10
+sin borrar datos (los `usuario` pasan a `coordinador`), pero no crea un
+superadmin. Para crearlo, generar el hash con
+`node -e "import('bcryptjs').then(b => b.default.hash('tuClave', 10).then(console.log))"`
+y cargarlo con
+`INSERT INTO usuarios (nombre, email, password, rol, debe_cambiar_password) VALUES ('Soporte', 'soporte@...', '<hash>', 'superadmin', TRUE);`.
 
 ## Estructura
 
@@ -404,7 +437,9 @@ api-eventos/
 │   ├── index.js                    crea el servidor y monta las rutas
 │   ├── routes/                     una ruta por recurso
 │   │   ├── auth.routes.js
-│   │   ├── empresas.routes.js
+│   │   ├── superadmin.routes.js    panel del sistema
+│   │   ├── miEmpresa.routes.js
+│   │   ├── usuarios.routes.js
 │   │   ├── clientes.routes.js
 │   │   ├── tiposEventos.routes.js
 │   │   ├── servicios.routes.js
@@ -417,8 +452,10 @@ api-eventos/
 │   │   ├── tareas.routes.js        incluye /mias
 │   │   └── seguimiento.routes.js
 │   ├── controllers/                un controlador por recurso
-│   │   ├── auth.controller.js      registrar, login, perfil
-│   │   ├── empresas.controller.js
+│   │   ├── auth.controller.js      login, perfil, cambio de contraseña
+│   │   ├── superadmin.controller.js  metricas, empresas y soporte
+│   │   ├── miEmpresa.controller.js
+│   │   ├── usuarios.controller.js
 │   │   ├── clientes.controller.js
 │   │   ├── tiposEventos.controller.js
 │   │   ├── servicios.controller.js
@@ -431,12 +468,13 @@ api-eventos/
 │   │   ├── tareas.controller.js    secuencia, vencida y mis tareas
 │   │   └── seguimiento.controller.js  consultas agregadas del tablero
 │   ├── middlewares/
-│   │   ├── auth.middleware.js      verificarToken, verificarRol
+│   │   ├── auth.middleware.js      verificarToken, soloEmpresa, soloSuperadmin, permitirRoles
 │   │   └── validarId.middleware.js valida los :id de la URL (404 si no son enteros)
 │   ├── utils/                      lo que comparten los controladores
 │   │   ├── errores.js              traduce los errores de pg a HTTP
 │   │   ├── consultas.js            filtros, chequeo por empresa y empleado activo
-│   │   └── validaciones.js         formatos de ids, fechas, importes y cantidades
+│   │   ├── validaciones.js         formatos de ids, fechas, importes y cantidades
+│   │   └── usuarios.js             reglas de usuarios (último admin, uno mismo, vínculo)
 │   └── data/
 │       └── db.js                   pool de pg y parsers de fecha y monto
 └── .env                            no se versiona

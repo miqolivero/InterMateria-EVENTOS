@@ -62,6 +62,7 @@ Front ── [pantallas N contra el contrato] ─────── [prueba N co
 | 7 | Seguimiento general | Consultas agregadas del tablero | Tablero de inicio |
 | 8 | Cierre y feedback | Cierre, cancelación y feedback | Pestaña Cierre |
 | 9 | Pulido y entrega | Revisión, seed de demo, docs de decisiones | Revisión, guion de demo |
+| 10 | Superadmin, roles y aislamiento | Superadmin, roles `admin`/`coordinador`/`empleado`, personal con acceso, panel del empleado, cierre de las fugas | 3 layouts por rol, panel de superadmin, Personal con acceso, Usuarios, panel del empleado |
 
 **Primera demo:** fases 1 a 5, que cubren solicitud → presupuesto → evento.
 
@@ -422,6 +423,152 @@ falta resolver con varios eventos en paralelo.
 - [ ] Clonar el repo de cero y seguir el README alcanza para levantar todo.
 - [ ] Ensayar la demo juntos.
 - [ ] Cada uno puede explicar las pantallas y endpoints principales del otro.
+
+---
+
+## Fase 10 · Superadmin, roles y aislamiento entre empresas
+
+**Objetivo:**
+
+- tres niveles de acceso: **superadmin** (nosotros), la **empresa** (su `admin`)
+  y su **personal** (`coordinador` y `empleado`);
+- un panel para que la empresa dé de alta a sus empleados con acceso y rol;
+- un panel propio para el empleado, con sus tareas;
+- cerrar las tres fugas de la Fase 1:
+  - `GET /api/empresas` público;
+  - registro público;
+  - el `admin` de una empresa puede tocar otras.
+
+**Contrato:** sección "Fase 10" de `docs/API.md`, sobre todo la tabla
+**"Permisos por ruta"**.
+
+> Es una fase de **seguridad**. El criterio de "listo" no es que las pantallas
+> anden: es que **nadie pueda ver o tocar algo de otro rol o de otra empresa**,
+> aunque arme los pedidos a mano.
+
+### Backend · Miqueas
+
+1. **Base**
+   - `usuarios`:
+     - roles `superadmin`, `admin`, `coordinador` y `empleado`;
+     - `id_empresa` nullable y los CHECK del contrato;
+     - columna `debe_cambiar_password`;
+     - índice único parcial sobre `id_empleado`.
+   - Seed:
+     - el rol `usuario` pasa a `coordinador`;
+     - un superadmin;
+     - un usuario `empleado` en la empresa 1, con tareas con proveedor y libres;
+     - una cuarta empresa suspendida.
+     - Documentar todos los usuarios en el README.
+2. **Middlewares** `soloEmpresa`, `soloSuperadmin` y `permitirRoles`. Se
+   montan a nivel router en `index.js`, siguiendo la tabla de permisos.
+   `soloEmpresa` verifica que la empresa siga activa.
+3. **Auth**
+   - Login: `LEFT JOIN` con empresas, 403 si la empresa está suspendida y
+     devuelve `debe_cambiar_password`.
+   - Nuevo `PUT /auth/password`.
+   - Borrar el registro.
+4. **Panel de superadmin**:
+   - resumen y empresas con métricas, con consultas agregadas;
+   - alta de empresa con su admin, en una transacción;
+   - suspensión y reactivación;
+   - DELETE solo sin datos;
+   - soporte de usuarios de cada empresa.
+5. **Mi empresa** (`/mi-empresa`) y **Usuarios** (`/usuarios`), con las reglas 10.
+6. **Personal con acceso:**
+   - `POST /empleados` con el bloque `acceso` (empleado, vínculo y usuario en
+     una transacción);
+   - `POST /empleados/:id/acceso`;
+   - el campo `acceso` en las respuestas;
+   - la baja del empleado desactiva su usuario.
+7. **Panel del empleado** (regla 11):
+   - `/tareas/mias` con los datos del evento y del proveedor, **sin importes**,
+     y con `puede_avanzar`;
+   - `PATCH /tareas/:id/estado` y `PATCH /servicios-evento/:id` restringidos
+     al empleado, con el filtro en el `WHERE`.
+8. Borrar `empresas.routes.js` y `empresas.controller.js`.
+9. `docs/DECISIONES.md`: agregar "el superadmin solo ve métricas", "las
+   cuentas las crea la empresa, no hay registro público" y "el empleado no ve
+   importes".
+
+**Listo cuando** (todo con curl, armando los pedidos a mano):
+
+- [ ] Sin token, `GET /api/empresas` y `POST /api/auth/register` → 404.
+- [ ] Superadmin en cualquier ruta de empresa → 403. Admin, coordinador o
+      empleado en `/superadmin/*` → 403.
+- [ ] **Recorrer la tabla de permisos completa**: para cada fila, probar un rol
+      permitido y uno no permitido.
+- [ ] Empleado:
+  - [ ] cambia el estado de una tarea suya → 200; de una tarea ajena → 404;
+  - [ ] cambia el estado del proveedor de su servicio → 200; manda
+        `costo_acordado_proveedor` → 403; un servicio sin tareas suyas → 404;
+  - [ ] ninguna respuesta que recibe tiene importes ni costos.
+- [ ] Admin de la empresa 1 con un id de la empresa 2 en `/usuarios/:id` o
+      `/empleados/:id` → 404.
+- [ ] Alta de empleado con `acceso` y email repetido → no queda el empleado
+      creado a medias.
+- [ ] Suspender una empresa: login → 403, y el token viejo deja de servir.
+      Reactivarla devuelve todo como estaba.
+- [ ] No se puede dejar la empresa sin admin activo, ni quitarse el rol a uno mismo.
+- [ ] Un usuario con `debe_cambiar_password: true` lo ve en `false` después
+      de `PUT /auth/password`.
+
+### Frontend · Compañero
+
+1. **Sacar el Registro** (pantalla, ruta, link y servicio) y las pantallas
+   `Empresas` y `EmpresaForm`.
+2. **Menú único con roles**: una sola definición de opciones con los roles
+   permitidos para cada una (ver `front-eventos/CLAUDE.md`). Redirección por
+   rol al loguearse y guardas en las rutas.
+3. **Cambio de contraseña**:
+   - pantalla obligatoria si `debe_cambiar_password`;
+   - y opción "Cambiar contraseña" en el menú del usuario del `Header`.
+4. **`LayoutSuperadmin`**:
+   - Resumen (`Card` + `Statistic`);
+   - Empresas (`Table` con métricas, búsqueda, filtro y suspender);
+   - alta en `Modal` o `Drawer` con `Steps` (empresa → admin);
+   - detalle con `Descriptions`, `Statistic` y los usuarios con sus acciones
+     de soporte.
+5. **Personal** (admin):
+   - la `Table` suma la columna "Acceso", con el rol en un `Tag` o "Sin acceso";
+   - en el `Form` de alta, un `Switch` "Darle acceso al sistema" que muestra
+     email, contraseña temporal y `Select` de rol;
+   - para un empleado sin acceso, la acción "Dar acceso".
+6. **Usuarios** (admin): `Table` con filtro por rol, editar rol, activar o
+   desactivar y resetear la contraseña. Los mensajes 409 se muestran tal cual
+   los manda la API.
+7. **Mi empresa**: `Descriptions`, editable solo para admin y con el CUIT en
+   solo lectura.
+8. **`LayoutEmpleado`**, simple y pensado para el celular:
+   - **Mis tareas** como inicio: tarjetas o `List` agrupadas por evento, con
+     fecha, sede y cliente, las vencidas en rojo arriba de todo, y un filtro
+     por estado.
+   - Cada tarea muestra el **paso** (`Steps` con la secuencia) y un botón para
+     avanzar el estado, deshabilitado con un `Tooltip` si `puede_avanzar` es
+     `false`.
+   - Si la tarea tiene proveedor: un bloque con sus datos de contacto
+     (teléfono y email clickeables), el estado del proveedor con un `Select`
+     y las observaciones. Sin importes.
+
+**Listo cuando:**
+
+- [ ] Hay 4 experiencias distintas según el rol, y ninguna muestra opciones de otro.
+- [ ] El empleado puede trabajar su jornada solo desde "Mis tareas", también
+      desde el celular.
+- [ ] Ninguna pantalla del empleado muestra montos.
+- [ ] Los 403 y 409 se muestran con el mensaje de la API.
+- [ ] `build` y `lint` pasan.
+
+### Los dos
+
+- [ ] Probar juntos con 5 sesiones: superadmin, admin, coordinador y empleado
+      de la empresa 1, y el admin de la empresa suspendida.
+- [ ] Actualizar el DER: roles nuevos, `id_empresa` nullable y
+      `debe_cambiar_password` en `usuarios`.
+- [ ] Actualizar el relevamiento: los roles internos (los 7 actores) ahora se
+      agrupan en `admin`, `coordinador` y `empleado`. Explicar cuál cubre a cuál.
+- [ ] Sumar al guion de la demo: el panel de superadmin, el alta de un
+      empleado con acceso y su vista desde el celular.
 
 ---
 

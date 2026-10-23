@@ -35,7 +35,8 @@ export const responderError = (res, error, mensajes = {}) => {
   //   22P02 = texto invalido para el tipo ("abc" en un INTEGER o un BOOLEAN)
   //   22003 = numero fuera de rango (no entra en INTEGER o en NUMERIC(12,2))
   //   22007 / 22008 = fecha con formato invalido o inexistente
-  if (["22P02", "22003", "22007", "22008"].includes(error.code)) {
+  //   22001 = texto mas largo que la columna (un cuit de 20 caracteres)
+  if (["22P02", "22003", "22007", "22008", "22001"].includes(error.code)) {
     return res.status(400).json({ mensaje: "Hay datos con un formato invalido" });
   }
 

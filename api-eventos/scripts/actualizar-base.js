@@ -48,6 +48,24 @@ try {
     [3, "Seguimiento previo", "Repasar detalles, horarios y requerimientos antes del evento"],
     [4, "Cierre del servicio", "Verificar que el servicio se presto y cerrar el pago"]
   ]) await cliente.query("INSERT INTO tipos_tarea (nombre, descripcion, orden) VALUES ($1,$2,$3) ON CONFLICT (orden) DO NOTHING", [nombre, descripcion, orden]);
+  // Fase 10: roles, superadmin y cambio de contrasena obligatorio. Cada paso se
+  // puede repetir sin error, asi el script sirve en una base vieja y en una nueva.
+  // El UPDATE va antes del CHECK nuevo: con usuarios en 'usuario' fallaria.
+  // 'usuario' pasa a 'coordinador', que conserva la operacion completa que tenia.
+  for (const sql of [
+    "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS debe_cambiar_password BOOLEAN NOT NULL DEFAULT FALSE",
+    "ALTER TABLE usuarios DROP CONSTRAINT IF EXISTS usuarios_rol_check",
+    "UPDATE usuarios SET rol = 'coordinador' WHERE rol = 'usuario'",
+    "ALTER TABLE usuarios ALTER COLUMN rol DROP DEFAULT",
+    "ALTER TABLE usuarios ALTER COLUMN id_empresa DROP NOT NULL",
+    "ALTER TABLE usuarios ADD CONSTRAINT usuarios_rol_check CHECK (rol IN ('superadmin', 'admin', 'coordinador', 'empleado'))",
+    "ALTER TABLE usuarios DROP CONSTRAINT IF EXISTS chk_usuarios_empresa",
+    "ALTER TABLE usuarios ADD CONSTRAINT chk_usuarios_empresa CHECK ((rol = 'superadmin' AND id_empresa IS NULL AND id_empleado IS NULL) OR (rol <> 'superadmin' AND id_empresa IS NOT NULL))",
+    "ALTER TABLE usuarios DROP CONSTRAINT IF EXISTS chk_usuarios_empleado",
+    "ALTER TABLE usuarios ADD CONSTRAINT chk_usuarios_empleado CHECK (rol <> 'empleado' OR id_empleado IS NOT NULL)",
+    "CREATE UNIQUE INDEX IF NOT EXISTS uq_usuarios_empleado ON usuarios(id_empleado) WHERE id_empleado IS NOT NULL",
+    "ALTER TABLE eventos ADD COLUMN IF NOT EXISTS fecha_creacion TIMESTAMP NOT NULL DEFAULT NOW()"
+  ]) await cliente.query(sql);
   await cliente.query("COMMIT");
   console.log("Base actualizada. Se conservaron los registros existentes.");
 } catch (error) {

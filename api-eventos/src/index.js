@@ -1,8 +1,10 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
-import empresasRoutes from "./routes/empresas.routes.js";
 import authRoutes from "./routes/auth.routes.js";
+import superadminRoutes from "./routes/superadmin.routes.js";
+import miEmpresaRoutes from "./routes/miEmpresa.routes.js";
+import usuariosRoutes from "./routes/usuarios.routes.js";
 import clientesRoutes from "./routes/clientes.routes.js";
 import tiposEventosRoutes from "./routes/tiposEventos.routes.js";
 import serviciosRoutes from "./routes/servicios.routes.js";
@@ -14,6 +16,12 @@ import eventosRoutes from "./routes/eventos.routes.js";
 import serviciosEventoRoutes from "./routes/serviciosEvento.routes.js";
 import tareasRoutes from "./routes/tareas.routes.js";
 import seguimientoRoutes from "./routes/seguimiento.routes.js";
+import {
+  verificarToken,
+  soloEmpresa,
+  soloSuperadmin,
+  permitirRoles
+} from "./middlewares/auth.middleware.js";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -22,32 +30,50 @@ const PORT = process.env.PORT || 3000;
 app.use(cors({ origin: process.env.FRONT_URL || "http://localhost:5173" }));
 app.use(express.json());
 
-// Fase 1: autenticacion y empresas
+// -----------------------------------------------------------------------------
+// Permisos (Fase 10): la tabla "Permisos por ruta" de docs/API.md se aplica
+// aca, por grupo de rutas, y no endpoint por endpoint. Asi una ruta nueva que
+// se agregue a un router ya nace protegida. Donde el permiso cambia dentro de
+// un grupo (por ejemplo, PUT /mi-empresa solo para admin), el router suma su
+// propio permitirRoles.
+// -----------------------------------------------------------------------------
+const empresa = [verificarToken, soloEmpresa];
+const ADMIN = "admin";
+const COORDINADOR = "coordinador";
+const EMPLEADO = "empleado";
+const operacion = [...empresa, permitirRoles(ADMIN, COORDINADOR)];
+
+// Login publico; /perfil y /password protegidas dentro del router.
+// POST /auth/register y /api/empresas ya no existen: responden el 404 de abajo.
 app.use("/api/auth", authRoutes);
-app.use("/api/empresas", empresasRoutes);
 
-// Fase 2: catalogos
-app.use("/api/clientes", clientesRoutes);
-app.use("/api/tipos-eventos", tiposEventosRoutes);
-app.use("/api/servicios", serviciosRoutes);
-app.use("/api/proveedores", proveedoresRoutes);
-app.use("/api/empleados", empleadosRoutes);
+// Panel de superadmin
+app.use("/api/superadmin", verificarToken, soloSuperadmin, superadminRoutes);
 
-// Fase 3: solicitudes
-app.use("/api/solicitudes", solicitudesRoutes);
+// La empresa y sus usuarios
+app.use("/api/mi-empresa", ...empresa, permitirRoles(ADMIN, COORDINADOR, EMPLEADO), miEmpresaRoutes);
+app.use("/api/usuarios", ...empresa, permitirRoles(ADMIN), usuariosRoutes);
 
-// Fase 4: presupuestos (la version 1 se crea en /api/solicitudes/:id/presupuestos)
-app.use("/api/presupuestos", presupuestosRoutes);
+// Catalogos (Fase 2). Empleados: el alta, la edicion y el acceso son solo del
+// admin, y eso lo agrega su router.
+app.use("/api/clientes", ...operacion, clientesRoutes);
+app.use("/api/tipos-eventos", ...operacion, tiposEventosRoutes);
+app.use("/api/servicios", ...operacion, serviciosRoutes);
+app.use("/api/proveedores", ...operacion, proveedoresRoutes);
+app.use("/api/empleados", ...operacion, empleadosRoutes);
 
-// Fase 5: eventos (se crean en /api/presupuestos/:id/aceptar)
-app.use("/api/eventos", eventosRoutes);
+// Operacion (Fases 3 a 8). La version 1 del presupuesto se crea en
+// /api/solicitudes/:id/presupuestos y el evento en /api/presupuestos/:id/aceptar.
+app.use("/api/solicitudes", ...operacion, solicitudesRoutes);
+app.use("/api/presupuestos", ...operacion, presupuestosRoutes);
+app.use("/api/eventos", ...operacion, eventosRoutes);
+app.use("/api/seguimiento", ...operacion, seguimientoRoutes);
 
-// Fase 6: servicios del evento y tareas
-app.use("/api/servicios-evento", serviciosEventoRoutes);
-app.use("/api/tareas", tareasRoutes);
-
-// Fase 7: tablero de seguimiento
-app.use("/api/seguimiento", seguimientoRoutes);
+// Las dos unicas rutas de operacion que usa el empleado. El router le cierra el
+// resto (generar tareas, editar y borrar tareas) y el controller lo limita a
+// SUS registros.
+app.use("/api/servicios-evento", ...empresa, permitirRoles(ADMIN, COORDINADOR, EMPLEADO), serviciosEventoRoutes);
+app.use("/api/tareas", ...empresa, permitirRoles(ADMIN, COORDINADOR, EMPLEADO), tareasRoutes);
 
 // Ruta 404: siempre al final
 app.use((req, res) => {

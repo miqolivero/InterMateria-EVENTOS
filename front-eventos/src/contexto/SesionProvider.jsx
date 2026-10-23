@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { SesionContexto } from "./SesionContexto";
 import { cerrarSesion, obtenerPerfil, usuarioGuardado } from "../servicios/authService";
 import { mensajeError } from "../utils/errores";
+import { esEmpresaSuspendida } from "../servicios/axiosConfig";
 
 export default function SesionProvider({ children }) {
   const [usuario, setUsuario] = useState(() => localStorage.getItem("token") ? usuarioGuardado() : null);
@@ -22,7 +23,9 @@ export default function SesionProvider({ children }) {
       localStorage.setItem("usuario", JSON.stringify(data)); setUsuario(data);
     }).catch((error) => {
       if (!vigente || localStorage.getItem("token") !== token) return;
-      if ([401, 404].includes(error.response?.status)) salir();
+      // 401/404: la sesion ya no existe. Empresa suspendida: el interceptor ya
+      // borro el token y dejo el aviso para el login.
+      if ([401, 404].includes(error.response?.status) || esEmpresaSuspendida(error)) salir();
       else setErrorSesion(mensajeError(error, "No se pudo verificar tu sesión."));
     }).finally(() => { if (vigente && localStorage.getItem("token") === token) setCargando(false); });
     return () => { vigente = false; };
@@ -49,6 +52,15 @@ export default function SesionProvider({ children }) {
     setUsuario(datos); setErrorSesion(""); setCargando(true);
     setRevision((actual) => actual + 1);
   }
+  // Despues de cambiar la contrasena, por ejemplo: el perfil cambia sin
+  // volver a loguearse.
+  const actualizarUsuario = useCallback((cambios) => {
+    setUsuario((actual) => {
+      const nuevo = { ...actual, ...cambios };
+      localStorage.setItem("usuario", JSON.stringify(nuevo));
+      return nuevo;
+    });
+  }, []);
   return <SesionContexto.Provider value={{ usuario, cargando, errorSesion, iniciarSesion,
-    salir, reintentar: () => { setCargando(true); setErrorSesion(""); setRevision((actual) => actual + 1); } }}>{children}</SesionContexto.Provider>;
+    salir, actualizarUsuario, reintentar: () => { setCargando(true); setErrorSesion(""); setRevision((actual) => actual + 1); } }}>{children}</SesionContexto.Provider>;
 }

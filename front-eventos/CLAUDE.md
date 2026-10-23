@@ -39,6 +39,30 @@ que instalar `@ant-design/v5-patch-for-react-19`. Las fechas se manejan con
 - `RutaProtegida` y ocultar botones según el rol mejoran la experiencia, pero
   **no son seguridad**: la seguridad está en la API.
 
+## Roles y layouts (Fase 10)
+
+Según `usuario.rol` del login hay **tres layouts**:
+
+| Rol | Layout | Inicio | Menú |
+| --- | --- | --- | --- |
+| `superadmin` | `LayoutSuperadmin` | `/superadmin` | Resumen, Empresas |
+| `admin` | `LayoutPrincipal` | `/seguimiento` | Todo, más Mi empresa, Personal (con acceso) y Usuarios |
+| `coordinador` | `LayoutPrincipal` | `/seguimiento` | Toda la operación, sin Personal (ABM), Usuarios ni la edición de Mi empresa |
+| `empleado` | `LayoutEmpleado` | `/mis-tareas` | Mis tareas, Mi empresa (solo lectura) |
+
+- El menú se arma desde **una sola definición** de opciones con los roles
+  permitidos para cada una. No hay listas de menú repetidas por rol.
+- Guardas en las rutas: si un rol entra a una ruta que no es suya, se lo
+  redirige a su inicio. Es experiencia de usuario: la seguridad la pone la API.
+- **No existe** pantalla de registro ni listado de empresas fuera del panel de
+  superadmin.
+- Si el login trae `debe_cambiar_password: true`, se muestra la pantalla de
+  cambio de contraseña antes de cualquier otra.
+- Si la API responde 403 de empresa suspendida, cerrar la sesión y mostrar el
+  mensaje en el login.
+- El rol `empleado` nunca muestra importes: la API no los manda, y el front no
+  tiene que dejar columnas vacías de montos.
+
 ## Ant Design
 
 - `main.jsx`: `ConfigProvider` con `locale={esES}` (`antd/locale/es_ES`) y el

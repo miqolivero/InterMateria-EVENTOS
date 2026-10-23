@@ -16,19 +16,31 @@ api.interceptors.request.use((config) => {
   return config; // obligatorio: sin esto la peticion no sale
 });
 
-// DESPUES de cada respuesta: si es 401, cerrar sesion.
-// Cubre el caso del token vencido en cualquier pantalla.
+// DESPUES de cada respuesta: si la sesion ya no sirve, cerrarla.
+// - 401: token vencido, invalido o de un usuario desactivado.
+// - 403 con codigo "empresa_suspendida": la empresa fue suspendida mientras
+//   la persona trabajaba. Es el UNICO 403 que cierra la sesion; el resto de
+//   los 403 ("no tenes permiso") solo se muestran. Se decide por el codigo, no
+//   comparando el texto del mensaje.
+export const esEmpresaSuspendida = (error) =>
+  error.response?.status === 403 && error.response.data?.codigo === "empresa_suspendida";
+
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    // Un 401 en login es un error del formulario, no una sesión vencida.
-    const esAcceso = ["/auth/login", "/auth/register"].includes(error.config?.url);
+    // Un 401 o 403 en login es un error del formulario, no una sesión vencida.
+    const esAcceso = error.config?.url === "/auth/login";
     const tokenActual = localStorage.getItem("token");
     const autorizacionEnviada = error.config?.headers?.Authorization;
     const esSesionActual = !tokenActual || autorizacionEnviada === `Bearer ${tokenActual}`;
-    if (error.response?.status === 401 && !esAcceso && esSesionActual) {
+    const suspendida = esEmpresaSuspendida(error);
+    if ((error.response?.status === 401 || suspendida) && !esAcceso && esSesionActual) {
       localStorage.removeItem("token");
       localStorage.removeItem("usuario");
+      // El login muestra el motivo al volver
+      if (suspendida) {
+        try { sessionStorage.setItem("avisoSesion", error.response.data.mensaje); } catch { /* sin aviso */ }
+      }
       window.dispatchEvent(new Event("sesion-expirada"));
     }
     return Promise.reject(error);

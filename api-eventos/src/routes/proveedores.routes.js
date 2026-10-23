@@ -1,5 +1,4 @@
 import { Router } from "express";
-import { verificarToken } from "../middlewares/auth.middleware.js";
 import {
   obtenerProveedores,
   obtenerProveedorPorId,
@@ -16,7 +15,6 @@ const router = Router();
 // Un :id con formato invalido es un registro que no existe: 404
 router.param("id", validarParamId("Proveedor no encontrado"));
 
-router.use(verificarToken);
 
 router.get("/", obtenerProveedores);
 

@@ -1,0 +1,5 @@
+/* Una franja de color arriba del menú lateral distingue el panel del sistema
+   del panel de una empresa. */
+.layout-superadmin .barra-lateral { border-top: 3px solid #2f54eb; }
+.cabecera-superadmin { display: flex; align-items: center; gap: 10px; }
+@media (max-width: 480px) { .etiqueta-metricas { display: none; } }

@@ -1,5 +1,4 @@
 import { Router } from "express";
-import { verificarToken } from "../middlewares/auth.middleware.js";
 import {
   obtenerClientes,
   obtenerClientePorId,
@@ -16,7 +15,6 @@ router.param("id", validarParamId("Cliente no encontrado"));
 
 // Todas las rutas del recurso piden token: de ahi sale el id_empresa con el
 // que se filtran los datos. Se aplica una sola vez para todo el router.
-router.use(verificarToken);
 
 router.get("/", obtenerClientes);
 router.get("/:id", obtenerClientePorId);

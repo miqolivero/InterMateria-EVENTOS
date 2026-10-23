@@ -1,0 +1,8 @@
+.indicadores-sistema { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-bottom: 20px; }
+.metricas-empresa { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 16px; margin-bottom: 20px; }
+.bloque-empresa { margin-bottom: 20px; }
+.pasos-alta { margin-bottom: 24px; }
+.nombre-empresa { display: flex; flex-direction: column; }
+@media (max-width: 1199px) { .metricas-empresa { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 767px) { .indicadores-sistema, .metricas-empresa { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 420px) { .indicadores-sistema, .metricas-empresa { grid-template-columns: 1fr; } }

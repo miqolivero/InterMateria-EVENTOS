@@ -5,7 +5,7 @@ import { build, preview } from "vite";
 import react from "@vitejs/plugin-react";
 import { fileURLToPath } from "node:url";
 
-const usuario = { id_usuario: 1, nombre: "Cuenta de prueba", email: "demo@example.com", rol: "admin", id_empresa: 1, nombre_empresa: "Empresa de prueba", id_empleado: 1 };
+const usuario = { id_usuario: 1, nombre: "Cuenta de prueba", email: "demo@example.com", rol: "admin", id_empresa: 1, nombre_empresa: "Empresa de prueba", id_empleado: 1, debe_cambiar_password: false };
 const cliente = { id_cliente: 1, nombre: "Ana", apellido: "Demo", dni_cuit: "11111111", email: "ana@example.com", telefono: "3510000000", direccion: "Dirección de prueba", activo: true };
 const tipo = { id_tipo_evento: 1, nombre: "Cumpleaños", descripcion: "Evento de prueba", activo: true };
 const servicio = { id_servicio: 1, nombre: "Catering", descripcion: "Servicio de prueba", activo: true };
@@ -34,7 +34,8 @@ const api = crearHTTP(async (req, res) => {
   const recursos = { "/clientes": [cliente], "/tipos-eventos": [tipo], "/servicios": [servicio], "/proveedores": [proveedor], "/empleados": [empleado] };
   const respuestas = {
     ...recursos, "/auth/perfil": usuario,
-    "/empresas": [{ id_empresa: 1, nombre: "Empresa de prueba", cuit: "30-11111111-1", activo: true }],
+    "/mi-empresa": { id_empresa: 1, nombre: "Empresa de prueba", cuit: "30-11111111-1", email: null, telefono: null, direccion: null, fecha_creacion: "2026-10-01T12:00:00.000Z" },
+    "/usuarios": [{ id_usuario: 1, nombre: "Cuenta de prueba", email: "demo@example.com", rol: "admin", activo: true, id_empleado: 1, nombre_empleado: "Laura Demo", debe_cambiar_password: false, fecha_creacion: "2026-10-01T12:00:00.000Z" }],
     "/proveedores/1/servicios": [servicio], "/solicitudes": [solicitud], "/solicitudes/1": solicitud,
     "/presupuestos/1": presupuesto, "/presupuestos/2": { ...presupuesto, id_presupuesto: 2, numero_version: 2, estado: "presentado", editable: false },
     "/eventos": [{ ...evento, nombre_cliente: "Ana Demo", nombre_tipo_evento: "Cumpleaños", nombre_coordinador: "Laura Demo" }],

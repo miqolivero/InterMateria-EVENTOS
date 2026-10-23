@@ -1,5 +1,4 @@
 import { Router } from "express";
-import { verificarToken } from "../middlewares/auth.middleware.js";
 import {
   obtenerPresupuestoPorId,
   editarPresupuesto,
@@ -21,7 +20,6 @@ router.param("idDetalle", validarParamId("Renglon no encontrado"));
 
 // Todas las rutas piden token: la empresa del token es la que se compara con
 // la de la solicitud del presupuesto.
-router.use(verificarToken);
 
 // La creacion de la version 1 cuelga de la solicitud:
 // POST /api/solicitudes/:id/presupuestos (ver solicitudes.routes.js)

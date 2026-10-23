@@ -24,31 +24,39 @@ Abrir `http://localhost:5173`. El puerto es fijo para coincidir con el CORS de l
 API. Preparar PostgreSQL e iniciar la API según la guía antes de usar el
 frontend real. Compilar la interfaz no crea tablas ni usuarios.
 
-## Pantallas
+## Pantallas por rol (Fase 10)
+
+Según `usuario.rol` del login hay tres layouts. El menú y las guardas de las
+rutas salen de una sola definición, `src/utils/menu.jsx`: si un rol entra a una
+ruta que no es suya, vuelve a su inicio. Es experiencia de usuario: los
+permisos los aplica la API.
+
+| Rol | Layout | Inicio | Pantallas |
+| --- | --- | --- | --- |
+| `superadmin` | `LayoutSuperadmin` | `/superadmin` | Resumen (métricas), Empresas (`/superadmin/empresas`: tabla con métricas, búsqueda, filtro, suspender y alta en dos pasos) y detalle (`/superadmin/empresas/:id`: datos, métricas y soporte de usuarios) |
+| `admin` | `LayoutPrincipal` | `/seguimiento` | Toda la operación, más Personal (con acceso), Usuarios y Mi empresa editable |
+| `coordinador` | `LayoutPrincipal` | `/seguimiento` | Toda la operación y Mi empresa en solo lectura |
+| `empleado` | `LayoutEmpleado` | `/mis-tareas` | Mis tareas (su panel para el celular) y Mi empresa en solo lectura |
 
 | Ruta | Funcionalidad |
 | --- | --- |
-| `/` | Requiere sesión y redirige a Seguimiento |
-| `/login`, `/registro` | Acceso y registro con selección de empresa |
-| `/empresas` | Búsqueda, filtro de estado y administración por rol |
-| `/empresas/nueva`, `/empresas/:id/editar` | Formularios solo para admin; edición del estado activo |
+| `/login` | Acceso. No hay registro: las cuentas las crea el superadmin o el admin de la empresa |
+| `/cambiar-password` | Obligatoria si `debe_cambiar_password`; también desde el menú del usuario |
 | `/clientes` | Alta, edición, búsqueda y activación/desactivación de clientes |
 | `/catalogos` | Tipos de evento, servicios y proveedores; servicios ofrecidos por proveedor |
-| `/personal` | Empleados, cargo, rol laboral y vínculo activo con la empresa |
-| `/solicitudes` | Listado con filtros y nueva solicitud; creación rápida de cliente |
-| `/solicitudes/:id` | Datos, presupuestos y acciones según estado |
+| `/personal` | (admin) Empleados con la columna Acceso; alta con "Darle acceso al sistema" y "Dar acceso" |
+| `/usuarios` | (admin) Filtro por rol, alta, edición, activar/desactivar y reset de contraseña |
+| `/mi-empresa` | Datos de la empresa; el admin los edita, el CUIT queda en solo lectura |
+| `/solicitudes`, `/solicitudes/:id` | Listado, nueva solicitud, datos, presupuestos y acciones según estado |
 | `/presupuestos/:id` | Cabecera, detalle, totales, versiones, presentación, rechazo y aceptación |
-| `/eventos` | Listado con filtros y calendario mensual |
-| `/eventos/:id` | Resumen, servicios, tareas, cierre y feedback |
-| `/mis-tareas` | Tareas propias y cambio de estado con verificación de secuencia |
+| `/eventos`, `/eventos/:id` | Listado con calendario; resumen, servicios, tareas, cierre y feedback |
+| `/mis-tareas` | Admin y coordinador: tabla de sus tareas. Empleado: tarjetas por evento, vencidas arriba, filtro, pasos de la secuencia, avanzar estado y gestión del proveedor (sin importes) |
 | `/seguimiento` | Indicadores, próximos eventos, vencidas y servicios sin confirmar |
 | Otras rutas | Con sesión muestra la página 404; sin sesión redirige al login |
 
-Solo acceso y registro son públicos; todas las demás rutas requieren sesión.
-Sin sesión, la aplicación redirige al login y conserva la dirección solicitada
-para volver después de iniciar sesión. El backend
-es quien aplica los permisos y el aislamiento por empresa. El frontend no envía
-`id_empresa` en formularios de negocio; solo lo usa en el registro de cuenta.
+Si la API responde 403 con `codigo: "empresa_suspendida"`, el front cierra la
+sesión y el login muestra el motivo. El resto de los 403 y los 409 se muestran
+con el `mensaje` de la API, sin cerrar nada.
 
 ## Reglas reflejadas en la interfaz
 

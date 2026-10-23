@@ -3,7 +3,9 @@ import { Col, DatePicker, Form, Input, Row } from "antd";
 import dayjs from "dayjs";
 import { catalogos } from "../utils/catalogos.js";
 
-export default function FormularioCatalogo({ recurso, datos, form, guardar, ocupado }) {
+// children: campos propios de un recurso, dentro del mismo Form (el acceso al
+// sistema en el alta de Personal).
+export default function FormularioCatalogo({ recurso, datos, form, guardar, ocupado, children }) {
   const { campos } = catalogos[recurso];
   useEffect(() => {
     form.resetFields();
@@ -21,5 +23,6 @@ export default function FormularioCatalogo({ recurso, datos, form, guardar, ocup
             <Input maxLength={max} type={nombre === "email" ? "email" : nombre === "telefono" ? "tel" : "text"} />}
       </Form.Item>
     </Col>)}</Row>
+    {children}
   </Form>;
 }

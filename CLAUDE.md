@@ -35,7 +35,8 @@ decisión. Se prefiere código claro antes que código ingenioso.
 ## Arquitectura
 
 El sistema es **multitenant**: lo usan varias empresas organizadoras y cada una
-ve solo sus propios datos.
+ve solo sus propios datos. Hay **tres niveles de acceso** (ver la sección
+"Niveles de acceso").
 
 ```
 InterMateria-EVENTOS/
@@ -74,7 +75,7 @@ solo los campos clave.
 | Tabla | Para qué | Campos clave |
 | --- | --- | --- |
 | `empresas` | Organizadora (tenant) | `nombre`, `cuit` UNIQUE, contacto, `activo` |
-| `usuarios` | Login | `email` UNIQUE, `password` (hash), `rol` (`admin`/`usuario`), `id_empresa`, `id_empleado` NULL, `activo` |
+| `usuarios` | Login | `email` UNIQUE, `password` (hash), `rol` (`superadmin`/`admin`/`coordinador`/`empleado`), `id_empresa` (NULL solo para superadmin), `id_empleado` único (obligatorio para `empleado`), `debe_cambiar_password`, `activo` |
 | `clientes` | Quien encarga el evento | `id_empresa` NOT NULL, `nombre`, `apellido`, `dni_cuit`, `direccion`, contacto, `activo`, `fecha_alta` |
 | `tipos_eventos` | Cumpleaños, egresados... | `id_empresa`, `nombre`, `activo` |
 | `empleados` | Personal | `legajo`, `nombre`, `apellido`, `rol`, contacto |
@@ -97,6 +98,29 @@ Estados válidos:
 - `eventos.estado`: `confirmado` → `en_preparacion` → `realizado` / `cancelado`
 - `servicios_x_evento.estado_proveedor`: `solicitada` → `confirmada` → `en_seguimiento` → `finalizada` (o `rechazada`)
 - `tareas.estado_tarea`: `pendiente` → `en_curso` → `completada`
+
+## Niveles de acceso
+
+| Rol | Quién es | `id_empresa` | Qué puede hacer |
+| --- | --- | --- | --- |
+| `superadmin` | Los dueños del sistema | `NULL` | Panel de superadmin: alta, edición y suspensión de empresas, soporte de sus usuarios y métricas. **No ve datos operativos** de ninguna empresa (clientes, solicitudes, eventos, tareas) |
+| `admin` | El dueño de la empresa | su empresa | Todo lo de su empresa, más "Mi empresa", el alta de empleados con su acceso y la gestión de usuarios |
+| `coordinador` | Quien organiza los eventos | su empresa | Toda la operación: solicitudes, presupuestos, eventos completos, todas las tareas, seguimiento y catálogos |
+| `empleado` | Personal que ejecuta tareas | su empresa | Solo **sus tareas** y los datos básicos del evento. Cambia el estado de sus tareas y gestiona al proveedor de esas tareas (estado y observaciones). **No ve importes** |
+
+La tabla de **permisos por ruta** está en la sección "Fase 10" de `docs/API.md`.
+
+- **Una empresa no puede saber que existen otras.** No hay listados públicos de
+  empresas ni registro público.
+- **Las cuentas las crea alguien de arriba:** el superadmin crea la empresa con
+  su `admin`, y el `admin` da de alta a sus empleados en "Personal" con el rol
+  que corresponda. Quien recibe una contraseña puesta por otro tiene que
+  cambiarla en su primer ingreso (`debe_cambiar_password`).
+- **Empresa suspendida** (`activo = false`): sus usuarios no entran, y los
+  tokens que ya tenían dejan de servir.
+- **El superadmin solo ve métricas** (cantidades). Es una decisión de
+  privacidad: los datos de los clientes de cada empresa son de esa empresa,
+  no nuestros.
 
 ## Reglas de negocio
 
@@ -127,6 +151,14 @@ Estados válidos:
 9. **Multitenant**: los datos de una empresa no se ven ni se modifican desde
    otra. El responsable de una tarea y el coordinador de un evento tienen que ser
    empleados activos de la empresa del evento.
+10. **Usuarios**: siempre queda al menos un `admin` activo por empresa. Un admin
+    no puede desactivarse ni quitarse el rol a sí mismo. Un empleado tiene a lo
+    sumo un usuario, y un usuario `empleado` siempre está vinculado a un
+    empleado. Dar de baja a un empleado desactiva también su usuario.
+11. **Alcance del rol `empleado`**: solo ve y cambia **sus** tareas (las de otro
+    responden 404). Puede gestionar el proveedor de un servicio solo si es
+    responsable de alguna tarea de ese servicio, y solo `estado_proveedor` y
+    `observaciones`. Nunca recibe importes ni costos.
 
 ## Cómo trabajar en este repo
 

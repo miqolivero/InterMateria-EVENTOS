@@ -34,7 +34,7 @@ test("el interceptor envía el token y cerrar sesión lo elimina", async () => {
   cerrarSesion();
   assert.equal(localStorage.getItem("token"), null);
   assert.equal(localStorage.getItem("usuario"), null);
-  assert.equal((await api.get("/empresas")).config.headers.Authorization, undefined);
+  assert.equal((await api.get("/clientes")).config.headers.Authorization, undefined);
 });
 
 function responderError(status) {
@@ -63,11 +63,33 @@ test("403 y 409 conservan la sesión y muestran el mensaje del backend", async (
   for (const status of [403, 409]) {
     localStorage.setItem("token", "token-prueba");
     responderError(status);
-    try { await api.put("/empresas/1", {}); assert.fail("Debía fallar"); }
+    try { await api.put("/clientes/1", {}); assert.fail("Debía fallar"); }
     catch (error) { assert.equal(mensajeError(error), "Mensaje del servidor"); }
     assert.equal(localStorage.getItem("token"), "token-prueba");
   }
   assert.match(mensajeError(new Error("Sin red")), /conectar con el servidor/);
+});
+
+test("el 403 de empresa suspendida cierra la sesión y deja el aviso para el login", async () => {
+  const avisos = new Map();
+  globalThis.sessionStorage = { getItem: (k) => avisos.get(k) ?? null, setItem: (k, v) => avisos.set(k, v), removeItem: (k) => avisos.delete(k) };
+  let expiraciones = 0;
+  window.addEventListener("sesion-expirada", () => { expiraciones += 1; });
+  localStorage.setItem("token", "token-prueba");
+  api.defaults.adapter = async (config) => {
+    const error = new Error("Suspendida"); error.config = config;
+    error.response = { status: 403, data: { mensaje: "La empresa esta suspendida", codigo: "empresa_suspendida" } };
+    throw error;
+  };
+  await assert.rejects(api.get("/clientes"));
+  assert.equal(expiraciones, 1);
+  assert.equal(localStorage.getItem("token"), null);
+  assert.equal(avisos.get("avisoSesion"), "La empresa esta suspendida");
+  // En el login el 403 es un error del formulario: no cierra nada
+  localStorage.setItem("token", "otro");
+  await assert.rejects(api.post("/auth/login", {}));
+  assert.equal(localStorage.getItem("token"), "otro");
+  delete globalThis.sessionStorage;
 });
 
 test("un 401 tardío de una cuenta anterior no cierra una sesión nueva", async () => {

@@ -12,7 +12,7 @@ import {
   MENSAJE_EVENTO_CERRADO,
   SELECT_SERVICIO_EVENTO
 } from "./eventos.controller.js";
-import { SELECT_TAREA } from "./tareas.controller.js";
+import { SELECT_TAREA, objetoServicioEmpleado } from "./tareas.controller.js";
 
 // Servicios del evento: lo ACORDADO con cada proveedor (servicios_x_evento) y
 // su estado. Es lo que el cliente remarco en el relevamiento: el estado del
@@ -68,10 +68,113 @@ const buscarServicioEvento = async (idServicioEvento) => {
   return resultado.rows[0];
 };
 
+// Suma al SET el estado del proveedor y su fecha de confirmacion. La usan las
+// dos ramas del PATCH (admin/coordinador y empleado).
+// La fecha de confirmacion se guarda al pasar a 'confirmada' (si ya lo estaba,
+// se conserva la original) y se limpia si vuelve a 'solicitada'. En el SET,
+// estado_proveedor todavia es el valor viejo.
+// El ::varchar evita que PostgreSQL deduzca dos tipos distintos para el mismo
+// parametro (columna por un lado, comparacion por el otro).
+const agregarEstadoProveedor = (sets, valores, estado) => {
+  valores.push(estado);
+  const indice = valores.length;
+  sets.push(`estado_proveedor = $${indice}`);
+  sets.push(`fecha_confirmacion_proveedor = CASE
+    WHEN $${indice}::varchar = 'confirmada' AND estado_proveedor <> 'confirmada' THEN CURRENT_DATE
+    WHEN $${indice}::varchar = 'solicitada' THEN NULL
+    ELSE fecha_confirmacion_proveedor END`);
+};
+
+// ---- Rama del rol empleado (regla 11) ----------------------------------------
+// El empleado gestiona al proveedor de los servicios donde tiene tareas: solo
+// el estado y las observaciones. El proveedor asignado y los importes son
+// decisiones del coordinador, y los importes ni siquiera los puede ver.
+const CAMPOS_EMPLEADO = ["estado_proveedor", "observaciones"];
+
+const MENSAJES_EMPLEADO = {
+  camposProhibidos: "Solo podes actualizar el estado y las observaciones del proveedor",
+  noEncontrado: "Servicio no encontrado"
+};
+
+const actualizarComoEmpleado = async (req, res) => {
+  const { id_empresa: idEmpresa, id_empleado: idEmpleado } = req.usuario;
+  const body = req.body ?? {};
+
+  // 1. Campos: va antes que la base, asi un 403 no revela si el servicio
+  //    existe o de quien es.
+  if (Object.keys(body).some((campo) => !CAMPOS_EMPLEADO.includes(campo))) {
+    return res.status(403).json({ mensaje: MENSAJES_EMPLEADO.camposProhibidos });
+  }
+  if (Object.hasOwn(body, "estado_proveedor") && !ESTADOS_PROVEEDOR.includes(body.estado_proveedor)) {
+    return res.status(400).json({ mensaje: MENSAJES.estadoInvalido });
+  }
+
+  try {
+    // 2. El filtro va en el WHERE: el servicio tiene que ser de su empresa Y
+    //    tener al menos una tarea suya. Si no, 404, como si no existiera.
+    const resultado = await pool.query(
+      `SELECT sxe.id_servicio_x_evento, e.estado AS estado_evento
+       FROM servicios_x_evento sxe
+       JOIN eventos e ON e.id_evento = sxe.id_evento
+       WHERE sxe.id_servicio_x_evento = $1 AND e.id_empresa = $2
+         AND EXISTS (SELECT 1 FROM tareas t
+                     WHERE t.id_servicio_x_evento = sxe.id_servicio_x_evento
+                       AND t.id_empleado_responsable = $3)`,
+      [req.params.id, idEmpresa, idEmpleado]
+    );
+    const servicio = resultado.rows[0];
+
+    if (!servicio) {
+      return res.status(404).json({ mensaje: MENSAJES_EMPLEADO.noEncontrado });
+    }
+    if (!ESTADOS_EVENTO_ABIERTO.includes(servicio.estado_evento)) {
+      return res.status(409).json({ mensaje: MENSAJE_EVENTO_CERRADO });
+    }
+
+    // 3. Mismo UPDATE parcial que la otra rama, con solo dos campos posibles
+    const sets = [];
+    const valores = [];
+    if (Object.hasOwn(body, "estado_proveedor")) {
+      agregarEstadoProveedor(sets, valores, body.estado_proveedor);
+    }
+    if (Object.hasOwn(body, "observaciones")) {
+      valores.push(body.observaciones ?? null);
+      sets.push(`observaciones = $${valores.length}`);
+    }
+    if (sets.length > 0) {
+      valores.push(req.params.id);
+      await pool.query(
+        `UPDATE servicios_x_evento SET ${sets.join(", ")}
+         WHERE id_servicio_x_evento = $${valores.length}`,
+        valores
+      );
+    }
+
+    // 4. La respuesta es el objeto "servicio" de /tareas/mias: sin importes
+    const respuesta = await pool.query(
+      `SELECT ${objetoServicioEmpleado("sxe", "sv", "pr")} AS servicio
+       FROM servicios_x_evento sxe
+       JOIN servicios sv ON sv.id_servicio = sxe.id_servicio
+       LEFT JOIN proveedores pr ON pr.id_proveedor = sxe.id_proveedor
+       WHERE sxe.id_servicio_x_evento = $1`,
+      [req.params.id]
+    );
+
+    res.json(respuesta.rows[0].servicio);
+  } catch (error) {
+    responderError(res, error);
+  }
+};
+
 // PATCH /api/servicios-evento/:id
 // Actualizacion PARCIAL: solo se tocan los campos que vienen en el body.
 // Regla 6: no modifica ninguna tarea.
+// El empleado tiene su propia rama, con permisos y respuesta distintos.
 export const actualizarServicioEvento = async (req, res) => {
+  if (req.usuario.rol === "empleado") {
+    return actualizarComoEmpleado(req, res);
+  }
+
   const idEmpresa = req.usuario.id_empresa;
   const body = req.body ?? {};
   const vino = (campo) => Object.hasOwn(body, campo);
@@ -128,18 +231,7 @@ export const actualizarServicioEvento = async (req, res) => {
     };
 
     if (vino("estado_proveedor")) {
-      agregar("estado_proveedor", body.estado_proveedor);
-      const indice = valores.length;
-
-      // La fecha de confirmacion se guarda al pasar a 'confirmada' (si ya lo
-      // estaba, se conserva la original) y se limpia si vuelve a
-      // 'solicitada'. En el SET, estado_proveedor todavia es el valor viejo.
-      // El ::varchar evita que PostgreSQL deduzca dos tipos distintos para el
-      // mismo parametro (columna por un lado, comparacion por el otro).
-      sets.push(`fecha_confirmacion_proveedor = CASE
-        WHEN $${indice}::varchar = 'confirmada' AND estado_proveedor <> 'confirmada' THEN CURRENT_DATE
-        WHEN $${indice}::varchar = 'solicitada' THEN NULL
-        ELSE fecha_confirmacion_proveedor END`);
+      agregarEstadoProveedor(sets, valores, body.estado_proveedor);
     }
     if (vino("id_proveedor")) {
       agregar("id_proveedor", esVacio(body.id_proveedor) ? null : body.id_proveedor);

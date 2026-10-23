@@ -1,0 +1,7 @@
+.layout-empleado { min-height: 100vh; }
+.cabecera-empleado { background: #fff; display: flex; align-items: center; justify-content: space-between; gap: 12px; height: 56px; padding: 0 16px; line-height: normal; border-bottom: 1px solid #e5e5e5; }
+.marca-empleado { display: flex; align-items: center; gap: 10px; color: #262626; font-size: 18px; min-width: 0; }
+.empresa-empleado { font-size: 16px; max-width: 220px; }
+.navegacion-empleado { background: #fff; border-bottom: 1px solid #e5e5e5; position: sticky; top: 0; z-index: 10; }
+.menu-empleado { max-width: 760px; margin: 0 auto; border-bottom: none; justify-content: center; }
+.contenido-empleado { width: 100%; max-width: 760px; margin: 0 auto; padding: 20px 16px 40px; }

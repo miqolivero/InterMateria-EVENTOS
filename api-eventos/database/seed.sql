@@ -21,12 +21,15 @@
 SET client_encoding = 'UTF8';
 
 -- -----------------------------------------------------------------------------
--- Empresas (los 3 tenants)
+-- Empresas (los tenants)
 -- -----------------------------------------------------------------------------
-INSERT INTO empresas (id_empresa, nombre, cuit, email, telefono, direccion) VALUES
-(1, 'Eventos del Centro', '30-71234567-8', 'contacto@eventosdelcentro.com', '351-4001122', 'Av. Colón 1200, Córdoba'),
-(2, 'Fiestas Norte', '30-70987654-3', 'info@fiestasnorte.com', '351-4553344', 'Rafael Núñez 4500, Córdoba'),
-(3, 'Producciones Sur', '30-69876543-1', 'hola@produccionessur.com', NULL, NULL);
+-- La empresa 4 esta SUSPENDIDA (activo = false): sirve para probar que sus
+-- usuarios no pueden entrar (Fase 10).
+INSERT INTO empresas (id_empresa, nombre, cuit, email, telefono, direccion, activo) VALUES
+(1, 'Eventos del Centro', '30-71234567-8', 'contacto@eventosdelcentro.com', '351-4001122', 'Av. Colón 1200, Córdoba', TRUE),
+(2, 'Fiestas Norte', '30-70987654-3', 'info@fiestasnorte.com', '351-4553344', 'Rafael Núñez 4500, Córdoba', TRUE),
+(3, 'Producciones Sur', '30-69876543-1', 'hola@produccionessur.com', NULL, NULL, TRUE),
+(4, 'Salones del Lago', '30-71555444-2', 'info@saloneslago.com', '3541-422233', 'Av. San Martín 300, Villa Carlos Paz', FALSE);
 
 -- -----------------------------------------------------------------------------
 -- Tipos de tarea: los 4 pasos del seguimiento de un proveedor
@@ -58,17 +61,28 @@ INSERT INTO empleados_x_empresa (id_empleado, id_empresa, cargo, fecha_inicio) V
 (5, 2, 'Coordinadora de eventos', CURRENT_DATE - 300);
 
 -- -----------------------------------------------------------------------------
--- Usuarios: un admin y uno comun por empresa
+-- Usuarios: los 4 roles de la Fase 10
 -- -----------------------------------------------------------------------------
--- Los dos usuarios de la empresa 1 estan vinculados a un empleado, para poder
--- probar "Mis tareas" (fase 6). Los demas van sin empleado a proposito.
-INSERT INTO usuarios (id_usuario, nombre, email, password, rol, id_empresa, id_empleado) VALUES
-(1, 'Laura Giménez', 'admin@eventosdelcentro.com',   '$2b$10$WufpnoOJvWfopKLXXB58Nu.eZ4L0iuAUQiF4DcfzYcLut0SFL6VYi', 'admin',   1, 1),
-(2, 'Martín Ríos',   'usuario@eventosdelcentro.com', '$2b$10$WufpnoOJvWfopKLXXB58Nu.eZ4L0iuAUQiF4DcfzYcLut0SFL6VYi', 'usuario', 1, 2),
-(3, 'Nadia Paz',     'admin@fiestasnorte.com',       '$2b$10$WufpnoOJvWfopKLXXB58Nu.eZ4L0iuAUQiF4DcfzYcLut0SFL6VYi', 'admin',   2, 5),
-(4, 'Pablo Herrera', 'usuario@fiestasnorte.com',     '$2b$10$WufpnoOJvWfopKLXXB58Nu.eZ4L0iuAUQiF4DcfzYcLut0SFL6VYi', 'usuario', 2, NULL),
-(5, 'Ana Torres',    'admin@produccionessur.com',    '$2b$10$WufpnoOJvWfopKLXXB58Nu.eZ4L0iuAUQiF4DcfzYcLut0SFL6VYi', 'admin',   3, NULL),
-(6, 'Lucas Franco',  'usuario@produccionessur.com',  '$2b$10$WufpnoOJvWfopKLXXB58Nu.eZ4L0iuAUQiF4DcfzYcLut0SFL6VYi', 'usuario', 3, NULL);
+-- - 7: el superadmin (los duenos del sistema). Sin empresa ni empleado.
+-- - Empresa 1: un usuario de cada rol. El coordinador (2) era el "usuario"
+--   comun de antes. La empleada (8, Carla Vega) tiene tareas con proveedor y
+--   libres, y nace con debe_cambiar_password: su contrasena la "puso el admin",
+--   asi que el front le pide cambiarla en el primer ingreso.
+-- - Empresas 2 y 3: un admin y un coordinador cada una.
+-- - 9: el admin de la empresa 4, que esta suspendida: no puede entrar.
+-- - 10: Miqueas, el otro superadmin (dueno del sistema). Nace con
+--   debe_cambiar_password: en el primer ingreso elige su propia contrasena.
+INSERT INTO usuarios (id_usuario, nombre, email, password, rol, id_empresa, id_empleado, debe_cambiar_password) VALUES
+(1, 'Laura Giménez', 'admin@eventosdelcentro.com',   '$2b$10$WufpnoOJvWfopKLXXB58Nu.eZ4L0iuAUQiF4DcfzYcLut0SFL6VYi', 'admin',       1,    1,    FALSE),
+(2, 'Martín Ríos',   'usuario@eventosdelcentro.com', '$2b$10$WufpnoOJvWfopKLXXB58Nu.eZ4L0iuAUQiF4DcfzYcLut0SFL6VYi', 'coordinador', 1,    2,    FALSE),
+(3, 'Nadia Paz',     'admin@fiestasnorte.com',       '$2b$10$WufpnoOJvWfopKLXXB58Nu.eZ4L0iuAUQiF4DcfzYcLut0SFL6VYi', 'admin',       2,    5,    FALSE),
+(4, 'Pablo Herrera', 'usuario@fiestasnorte.com',     '$2b$10$WufpnoOJvWfopKLXXB58Nu.eZ4L0iuAUQiF4DcfzYcLut0SFL6VYi', 'coordinador', 2,    NULL, FALSE),
+(5, 'Ana Torres',    'admin@produccionessur.com',    '$2b$10$WufpnoOJvWfopKLXXB58Nu.eZ4L0iuAUQiF4DcfzYcLut0SFL6VYi', 'admin',       3,    NULL, FALSE),
+(6, 'Lucas Franco',  'usuario@produccionessur.com',  '$2b$10$WufpnoOJvWfopKLXXB58Nu.eZ4L0iuAUQiF4DcfzYcLut0SFL6VYi', 'coordinador', 3,    NULL, FALSE),
+(7, 'Soporte',       'soporte@eventosapp.com',       '$2b$10$WufpnoOJvWfopKLXXB58Nu.eZ4L0iuAUQiF4DcfzYcLut0SFL6VYi', 'superadmin',  NULL, NULL, FALSE),
+(8, 'Carla Vega',    'carla@eventosdelcentro.com',   '$2b$10$WufpnoOJvWfopKLXXB58Nu.eZ4L0iuAUQiF4DcfzYcLut0SFL6VYi', 'empleado',    1,    3,    TRUE),
+(9, 'Sofía Luna',    'admin@saloneslago.com',        '$2b$10$WufpnoOJvWfopKLXXB58Nu.eZ4L0iuAUQiF4DcfzYcLut0SFL6VYi', 'admin',       4,    NULL, FALSE),
+(10, 'Miqueas Olivero', 'miqueas@eventosapp.com',    '$2b$10$WufpnoOJvWfopKLXXB58Nu.eZ4L0iuAUQiF4DcfzYcLut0SFL6VYi', 'superadmin',  NULL, NULL, TRUE);
 
 -- =============================================================================
 -- EMPRESA 1 · set completo (es la que se usa para la demo)
@@ -532,6 +546,18 @@ INSERT INTO servicios_x_evento (id_servicio_x_evento, id_evento, id_servicio, id
                                 fecha_confirmacion_proveedor, observaciones) VALUES
 (12, 6, 6, 5, 'Mesa dulce y comida para 50 chicos', 50, 200000.00, 300000.00,
  'solicitada', NULL, NULL);
+
+-- =============================================================================
+-- Fase 10 · tareas libres de Carla Vega (la usuaria con rol empleado)
+-- =============================================================================
+-- Carla ya tiene la secuencia del catering del evento 2 (tareas 14 a 17).
+-- Con estas suma tareas libres en dos eventos, una de ellas vencida, para que
+-- su panel muestre de todo: con proveedor, libres, vencidas y de dos eventos.
+INSERT INTO tareas (id_tarea, id_evento, id_empleado_responsable, id_servicio_x_evento,
+                    id_tipo_tarea, descripcion, fecha_prevista, fecha_finalizacion,
+                    estado_tarea, observaciones) VALUES
+(40, 2, 3, NULL, NULL, 'Imprimir las tarjetas de ubicación de las mesas', CURRENT_DATE - 2, NULL, 'pendiente', NULL),
+(41, 1, 3, NULL, NULL, 'Retirar los centros de mesa del depósito',       CURRENT_DATE + 6, NULL, 'en_curso',  'Están en el depósito de la calle Ituzaingó');
 
 -- =============================================================================
 -- Reacomodar las secuencias

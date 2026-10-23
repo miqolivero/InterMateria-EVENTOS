@@ -108,17 +108,27 @@ const estadoEvento = async (ejecutor, idEvento, idEmpresa) => {
   return resultado.rows[0]?.estado ?? null;
 };
 
+// Regla 11: el rol empleado solo trabaja sobre SUS tareas. Devuelve su
+// id_empleado (que soloEmpresa leyo de la base) o null para admin y
+// coordinador, que ven todas las de la empresa. Se usa como filtro en el
+// WHERE: una tarea de otro no aparece y responde 404, igual que una de otra
+// empresa, sin revelar que existe.
+export const responsableObligatorio = (usuario) =>
+  usuario.rol === "empleado" ? usuario.id_empleado : null;
+
 // Datos de la tarea que hacen falta para validar un cambio: su evento (y si
 // esta abierto) y si es de la secuencia.
-const datosTarea = async (ejecutor, idTarea, idEmpresa) => {
+// idResponsable: si viene (rol empleado), la tarea tiene que ser suya.
+const datosTarea = async (ejecutor, idTarea, idEmpresa, idResponsable = null) => {
   const resultado = await ejecutor.query(
     `SELECT t.id_tarea, t.id_evento, t.id_servicio_x_evento, t.id_tipo_tarea,
             t.estado_tarea, tt.orden, e.estado AS estado_evento
      FROM tareas t
      JOIN eventos e ON e.id_evento = t.id_evento
      LEFT JOIN tipos_tarea tt ON tt.id_tipo_tarea = t.id_tipo_tarea
-     WHERE t.id_tarea = $1 AND e.id_empresa = $2`,
-    [idTarea, idEmpresa]
+     WHERE t.id_tarea = $1 AND e.id_empresa = $2
+       AND ($3::int IS NULL OR t.id_empleado_responsable = $3::int)`,
+    [idTarea, idEmpresa, idResponsable]
   );
 
   return resultado.rows[0] ?? null;
@@ -313,7 +323,13 @@ export const cambiarEstadoTarea = async (req, res) => {
   try {
     await client.query("BEGIN");
 
-    const tarea = await datosTarea(client, req.params.id, idEmpresa);
+    // Regla 11: el empleado solo encuentra SUS tareas (filtro en el WHERE)
+    const tarea = await datosTarea(
+      client,
+      req.params.id,
+      idEmpresa,
+      responsableObligatorio(req.usuario)
+    );
 
     if (!tarea) {
       await client.query("ROLLBACK");
@@ -436,39 +452,107 @@ export const eliminarTarea = async (req, res) => {
   }
 };
 
-// GET /api/tareas/mias?estado_tarea=
+// GET /api/tareas/mias?estado_tarea=&vencidas=true
 // Las tareas del empleado vinculado al usuario logueado, de eventos abiertos.
-// El id_empleado no viaja en el token: se busca en usuarios con el id del
-// token, asi un cambio de vinculo se ve sin tener que volver a loguearse.
+// Es la pantalla de trabajo del rol empleado (Fase 10), pero la usan los tres
+// roles. El id_empleado no viaja en el token: lo lee soloEmpresa de la base en
+// cada pedido, asi un cambio de vinculo se ve sin volver a loguearse.
+//
+// Ademas de los campos de siempre, cada tarea trae lo que el empleado necesita
+// para trabajar sin abrir el evento (al que no tiene acceso):
+//   - puede_avanzar: si el paso anterior de la secuencia esta completado,
+//     aunque sea de otro empleado (regla 5, calculada en el SQL);
+//   - evento: los datos basicos del evento;
+//   - servicio: el servicio, su proveedor y los pasos de la secuencia.
+// Regla 11: NINGUNA columna de importes o costos. Los objetos se arman con
+// json_build_object campo por campo, nunca con un SELECT *, asi un campo nuevo
+// en la tabla no se cuela en la respuesta.
+// El objeto "servicio" del panel del empleado, o NULL en las tareas libres.
+// Lo usan /tareas/mias y la respuesta de PATCH /servicios-evento/:id para el
+// empleado, asi los dos devuelven exactamente lo mismo. Recibe los alias de
+// servicios_x_evento, servicios y proveedores de la consulta que lo usa.
+// pasos: la secuencia completa del servicio (sin responsables ni importes),
+// para que el front muestre en que paso esta cada tarea.
+export function objetoServicioEmpleado(sxe, sv, pr) {
+  return `CASE WHEN ${sxe}.id_servicio_x_evento IS NULL THEN NULL ELSE json_build_object(
+    'id_servicio_x_evento', ${sxe}.id_servicio_x_evento,
+    'nombre_servicio', ${sv}.nombre,
+    'descripcion', ${sxe}.descripcion,
+    'estado_proveedor', ${sxe}.estado_proveedor,
+    'fecha_confirmacion_proveedor', ${sxe}.fecha_confirmacion_proveedor,
+    'observaciones', ${sxe}.observaciones,
+    'proveedor', CASE WHEN ${pr}.id_proveedor IS NULL THEN NULL ELSE json_build_object(
+      'id_proveedor', ${pr}.id_proveedor,
+      'razon_social', ${pr}.razon_social,
+      'telefono', ${pr}.telefono,
+      'email', ${pr}.email) END,
+    'pasos', COALESCE((
+      SELECT json_agg(json_build_object(
+               'orden', ttx.orden,
+               'nombre_tipo_tarea', ttx.nombre,
+               'estado_tarea', tx.estado_tarea) ORDER BY ttx.orden)
+      FROM tareas tx
+      JOIN tipos_tarea ttx ON ttx.id_tipo_tarea = tx.id_tipo_tarea
+      WHERE tx.id_servicio_x_evento = ${sxe}.id_servicio_x_evento), '[]'::json)
+  ) END`;
+}
+
+const COLUMNAS_PANEL_EMPLEADO = `,
+  CASE WHEN t.id_tipo_tarea IS NULL OR t.id_servicio_x_evento IS NULL THEN TRUE
+       ELSE COALESCE((
+         SELECT tp.estado_tarea = 'completada'
+         FROM tareas tp
+         JOIN tipos_tarea ttp ON ttp.id_tipo_tarea = tp.id_tipo_tarea
+         WHERE tp.id_servicio_x_evento = t.id_servicio_x_evento
+           AND ttp.orden < tt.orden
+         ORDER BY ttp.orden DESC
+         LIMIT 1), TRUE)
+  END AS puede_avanzar,
+  json_build_object(
+    'id_evento', e.id_evento,
+    'nombre_tipo_evento', te.nombre,
+    'nombre_cliente', CONCAT_WS(' ', c.nombre, NULLIF(c.apellido, '-')),
+    'fecha_evento_confirmada', e.fecha_evento_confirmada,
+    'sede_acordada', e.sede_acordada,
+    'estado', e.estado,
+    'nombre_coordinador', CASE WHEN coord.id_empleado IS NULL THEN NULL
+                               ELSE coord.nombre || ' ' || coord.apellido END
+  ) AS evento,
+  ${objetoServicioEmpleado("sxe", "sv", "pr")} AS servicio`;
+
+const JOINS_PANEL_EMPLEADO = `${JOINS_EVENTO_DE_TAREA}
+  LEFT JOIN empleados coord ON coord.id_empleado = e.id_empleado_coordinador`;
+
 export const obtenerMisTareas = async (req, res) => {
   const idEmpresa = req.usuario.id_empresa;
+  const idEmpleado = req.usuario.id_empleado;
+
+  // Un usuario sin empleado vinculado no tiene tareas: 200 con []
+  if (!idEmpleado) {
+    return res.json([]);
+  }
+
+  const condiciones = [
+    "t.id_empleado_responsable = $1",
+    "e.id_empresa = $2",
+    "e.estado = ANY($3)"
+  ];
+  const valores = [idEmpleado, idEmpresa, ESTADOS_EVENTO_ABIERTO];
+
+  // Un estado que no existe se ignora, como los demas filtros invalidos
+  if (ESTADOS_TAREA.includes(req.query.estado_tarea)) {
+    valores.push(req.query.estado_tarea);
+    condiciones.push(`t.estado_tarea = $${valores.length}`);
+  }
+  if (req.query.vencidas === "true") {
+    condiciones.push(CONDICION_VENCIDA);
+  }
 
   try {
-    const usuario = await pool.query(
-      "SELECT id_empleado FROM usuarios WHERE id_usuario = $1 AND id_empresa = $2",
-      [req.usuario.id, idEmpresa]
+    const consulta = selectTarea(
+      `${COLUMNAS_EVENTO_DE_TAREA}${COLUMNAS_PANEL_EMPLEADO}`,
+      JOINS_PANEL_EMPLEADO
     );
-
-    const idEmpleado = usuario.rows[0]?.id_empleado;
-
-    // Un usuario sin empleado vinculado no tiene tareas: 200 con []
-    if (!idEmpleado) {
-      return res.json([]);
-    }
-
-    const condiciones = [
-      "t.id_empleado_responsable = $1",
-      "e.id_empresa = $2",
-      "e.estado = ANY($3)"
-    ];
-    const valores = [idEmpleado, idEmpresa, ESTADOS_EVENTO_ABIERTO];
-
-    if (req.query.estado_tarea) {
-      valores.push(req.query.estado_tarea);
-      condiciones.push(`t.estado_tarea = $${valores.length}`);
-    }
-
-    const consulta = selectTarea(COLUMNAS_EVENTO_DE_TAREA, JOINS_EVENTO_DE_TAREA);
 
     // Primero las vencidas (true va antes con DESC), despues por fecha
     const resultado = await pool.query(

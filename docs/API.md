@@ -15,6 +15,9 @@ cambia, se actualiza este archivo **y se avisa** antes de mergear.
 - **Listados**: devuelven un array directo (`[...]`), sin paginación.
 - **Rutas protegidas**: header `Authorization: Bearer <token>`. **Todas las
   rutas son protegidas, salvo las marcadas como Público.**
+- **Roles** (desde la Fase 10): `superadmin` (dueños del sistema) y, en cada
+  empresa, `admin`, `coordinador` y `empleado`. La tabla de permisos por ruta
+  está en la sección "Fase 10".
 - **Multitenant**: la empresa sale del token. Nunca se manda `id_empresa` en el
   body, salvo en el registro.
 - **Errores**: siempre `{ "mensaje": "..." }`. El front muestra el mensaje
@@ -40,7 +43,7 @@ Estos errores aplican a todos los endpoints y **no se repiten** en cada uno:
   otra empresa **o no es un entero válido** (`/clientes/abc`).
 - `400 · "Hay datos con un formato invalido"`: red de seguridad para un dato que
   la base no puede convertir a su tipo (un texto donde va un número o un
-  booleano, una fecha imposible, un número que no entra en la columna).
+  booleano, una fecha imposible, un número o un texto que no entra en la columna).
 - `400 · "El cuerpo del pedido no es un JSON valido"`.
 - `404 · "Ruta no encontrada"` para una ruta que no existe.
 - `500 · "Error interno del servidor"`, siempre con ese texto.
@@ -83,6 +86,10 @@ Estos errores aplican a todos los endpoints y **no se repiten** en cada uno:
 | 6 | Tareas | `/eventos/:id/tareas`, `/tareas` |
 | 7 | Seguimiento | `/seguimiento` |
 | 8 | Cierre | `/eventos/:id/cerrar`, `/eventos/:id/feedback` |
+| 10 | Autenticación (cambios) | `/auth/login`, `/auth/password` · se elimina `/auth/register` |
+| 10 | Panel de superadmin | `/superadmin/resumen`, `/superadmin/empresas` |
+| 10 | Mi empresa, personal y usuarios | `/mi-empresa`, `/empleados` (acceso), `/usuarios` · se elimina `/empresas` |
+| 10 | Panel del empleado | `/tareas/mias`, `/tareas/:id/estado`, `/servicios-evento/:id` |
 
 ---
 
@@ -91,6 +98,8 @@ Estos errores aplican a todos los endpoints y **no se repiten** en cada uno:
 ## Autenticación · `/api/auth`
 
 ### POST /auth/register
+
+> ⚠️ **Se elimina en la Fase 10.** Ya no hay registro público.
 
 **Acceso:** público. El usuario se crea con `rol: "usuario"`.
 
@@ -168,6 +177,10 @@ Respuesta 200: el mismo objeto `usuario` del login.
 ---
 
 ## Empresas · `/api/empresas`
+
+> ⚠️ **Se elimina en la Fase 10.** Lo reemplazan `/superadmin/empresas`
+> (superadmin) y `/mi-empresa` (cada empresa). Esta sección queda como
+> historial.
 
 Objeto **Empresa**:
 
@@ -1143,6 +1156,541 @@ Respuesta 200: **Evento (detalle)**.
 
 ---
 
+# Fase 10 · Superadmin, roles y aislamiento entre empresas
+
+Hasta la Fase 9 había dos roles (`admin` y `usuario`) que veían lo mismo, y
+quedaban tres fugas entre empresas:
+
+- el listado de empresas era público;
+- el registro era público y dejaba elegir cualquier empresa;
+- el `admin` de una empresa podía editar o borrar otras.
+
+Esta fase:
+
+- agrega el nivel **superadmin**;
+- define **tres roles dentro de cada empresa**;
+- deja que la empresa dé de alta a sus empleados con acceso al sistema;
+- cierra las fugas.
+
+## Roles
+
+| Rol | Quién es | `id_empresa` | Qué ve y qué puede hacer |
+| --- | --- | --- | --- |
+| `superadmin` | Nosotros, los dueños del sistema | `null` | El panel de superadmin: alta, edición y suspensión de empresas, soporte de sus usuarios y **solo métricas**. No ve clientes, solicitudes, eventos ni tareas de ninguna empresa |
+| `admin` | El dueño de la empresa | su empresa | Todo lo de su empresa, más "Mi empresa", "Personal" (alta de empleados y su acceso) y "Usuarios" |
+| `coordinador` | Quien organiza los eventos | su empresa | Toda la operación: solicitudes, presupuestos, eventos completos (resumen, servicios, proveedores, todas las tareas), seguimiento y catálogos |
+| `empleado` | Personal que ejecuta tareas | su empresa | Solo **sus tareas**, con los datos básicos del evento. Cambia el estado de sus tareas y, si la tarea es con un proveedor, **gestiona a ese proveedor** (estado y observaciones). No ve importes ni costos |
+
+**Ninguna empresa sabe que existen otras.** Las cuentas las crea alguien de
+arriba: el superadmin crea la empresa con su `admin`, y el `admin` da de alta a
+sus empleados con el rol que corresponda.
+
+## Permisos por ruta
+
+La API rechaza con **403 · `"No tenes permiso para esta accion"`** todo lo que
+no esté permitido en esta tabla.
+
+| Rutas | `superadmin` | `admin` | `coordinador` | `empleado` |
+| --- | :---: | :---: | :---: | :---: |
+| `/auth/login`, `/auth/perfil`, `/auth/password` | ✔ | ✔ | ✔ | ✔ |
+| `/superadmin/*` | ✔ | — | — | — |
+| `GET /mi-empresa` | — | ✔ | ✔ | ✔ |
+| `PUT /mi-empresa` | — | ✔ | — | — |
+| `/usuarios/*` | — | ✔ | — | — |
+| `GET /empleados`, `GET /empleados/:id` | — | ✔ | ✔ | — |
+| Alta, edición, baja y acceso de empleados | — | ✔ | — | — |
+| `/clientes`, `/tipos-eventos`, `/servicios`, `/proveedores` | — | ✔ | ✔ | — |
+| `/solicitudes`, `/presupuestos` | — | ✔ | ✔ | — |
+| `/eventos/*`, `/servicios-evento/*`, `/seguimiento/*` | — | ✔ | ✔ | ✔¹ |
+| `PUT /tareas/:id`, `DELETE /tareas/:id` | — | ✔ | ✔ | — |
+| `GET /tareas/mias`, `PATCH /tareas/:id/estado` | — | ✔ | ✔ | ✔² |
+
+¹ El `empleado` solo puede usar `PATCH /servicios-evento/:id`, y con
+restricciones (ver "Panel del empleado"). El resto de esas rutas le responde 403.
+
+² Solo sobre **sus** tareas. Si la tarea es de otro, 404 · `"Tarea no encontrada"`.
+
+Además:
+
+- Con token de `superadmin`, cualquier ruta de empresa responde
+  403 · `"Esta seccion es solo para usuarios de una empresa"`.
+- **Empresa suspendida** (`empresas.activo = false`):
+  - sus usuarios no pueden loguearse;
+  - si ya tenían un token, toda ruta de empresa (y también `/auth/perfil` y
+    `/auth/password`) responde 403 con un campo `codigo`:
+
+    ```json
+    { "mensaje": "La empresa esta suspendida. Contacta al administrador del sistema", "codigo": "empresa_suspendida" }
+    ```
+
+    Es el único 403 que obliga a cerrar la sesión, y el front no compara
+    textos: decide por `codigo`.
+- **Rol y estado frescos:** el rol, la empresa y el empleado se leen de la base
+  en cada pedido, no del token. Un cambio de rol corre desde el pedido
+  siguiente. Si el usuario fue desactivado, su token responde
+  401 · `"Token invalido"`.
+- **El permiso va antes que el registro:** si el rol no alcanza para la ruta,
+  responde 403 aunque el `:id` no exista. Así no se puede averiguar qué existe.
+- **Eliminados:** `POST /auth/register` y `/api/empresas` completo. Responden
+  404 · `"Ruta no encontrada"`.
+
+---
+
+## Autenticación (cambios)
+
+### POST /auth/login
+
+El objeto `usuario` suma un campo, `debe_cambiar_password`:
+
+```json
+{
+  "token": "eyJhbGciOiJIUzI1NiIs...",
+  "usuario": {
+    "id_usuario": 9,
+    "nombre": "Carla Ruiz",
+    "email": "carla@eventosdelcentro.com",
+    "rol": "empleado",
+    "id_empresa": 1,
+    "nombre_empresa": "Eventos del Centro",
+    "id_empleado": 3,
+    "debe_cambiar_password": true
+  }
+}
+```
+
+- `debe_cambiar_password` es `true` cuando la contraseña la puso otra persona
+  (alta o reset hecho por un admin o el superadmin). El front obliga a
+  cambiarla antes de seguir.
+- Un `superadmin` recibe `id_empresa`, `nombre_empresa` e `id_empleado` en `null`.
+- Un usuario de una empresa suspendida recibe 403 ·
+  `"La empresa esta suspendida. Contacta al administrador del sistema"`. La
+  contraseña se valida antes, así que no revela nada a quien no la conoce.
+
+### GET /auth/perfil
+
+El mismo objeto `usuario` del login.
+
+### PUT /auth/password
+
+**Acceso:** cualquier usuario logueado. Cambia su propia contraseña y pone
+`debe_cambiar_password` en `false`.
+
+Body:
+
+```json
+{ "password_actual": "temporal123", "password_nueva": "otraClave456" }
+```
+
+Respuesta 200:
+
+```json
+{ "mensaje": "Contrasena actualizada" }
+```
+
+Errores:
+
+- 400 · `"La contrasena actual y la nueva son obligatorias"`
+- 400 · `"La contrasena nueva tiene que tener al menos 6 caracteres"`
+- 400 · `"La contrasena actual no es correcta"`
+- 400 · `"La contrasena nueva tiene que ser distinta de la actual"`
+
+---
+
+## Panel de superadmin · `/api/superadmin`
+
+**Acceso:** solo `superadmin`.
+
+### GET /superadmin/resumen
+
+Respuesta 200:
+
+```json
+{
+  "empresas_activas": 3,
+  "empresas_suspendidas": 1,
+  "usuarios_activos": 14,
+  "eventos_abiertos": 9,
+  "eventos_proximos_30_dias": 5,
+  "eventos_realizados": 22
+}
+```
+
+### Objeto **EmpresaPanel**
+
+Los datos y las métricas de una empresa, nunca su información operativa.
+
+```json
+{
+  "id_empresa": 1,
+  "nombre": "Eventos del Centro",
+  "cuit": "30-71234567-8",
+  "email": "contacto@eventosdelcentro.com",
+  "telefono": "351-4001122",
+  "direccion": "Av. Colón 1200, Córdoba",
+  "activo": true,
+  "fecha_creacion": "2026-10-01T12:00:00.000Z",
+  "usuarios_activos": 4,
+  "empleados_activos": 6,
+  "clientes": 8,
+  "eventos_abiertos": 3,
+  "eventos_realizados": 6,
+  "ultimo_evento_creado": "2026-10-18"
+}
+```
+
+| Método | Ruta | Body | Respuesta |
+| --- | --- | --- | --- |
+| GET | `/superadmin/empresas?activo=&buscar=` | — | 200 · `[EmpresaPanel]` |
+| GET | `/superadmin/empresas/:id` | — | 200 · `EmpresaPanel` + `usuarios` (lista de **Usuario**) |
+| POST | `/superadmin/empresas` | `{ empresa: {...}, admin: { nombre, email, password } }` | 201 · igual que el GET por id |
+| PUT | `/superadmin/empresas/:id` | `nombre`*, `cuit`*, `email`, `telefono`, `direccion` | 200 · `EmpresaPanel` |
+| PATCH | `/superadmin/empresas/:id/activo` | `{ "activo": false }` | 200 · `EmpresaPanel` |
+| DELETE | `/superadmin/empresas/:id` | — | 204 (solo sin datos operativos) |
+| POST | `/superadmin/empresas/:id/usuarios` | `nombre`*, `email`*, `password`*, `rol`* | 201 · **Usuario** |
+| PATCH | `/superadmin/empresas/:id/usuarios/:idUsuario` | `rol` y/o `activo` | 200 · **Usuario** |
+| PUT | `/superadmin/empresas/:id/usuarios/:idUsuario/password` | `password_nueva`* | 200 · `{ "mensaje": "Contrasena actualizada" }` |
+
+Detalles:
+
+- **POST de empresa:**
+  - crea la empresa y su `admin` en **una sola transacción**: si falla algo,
+    no queda nada creado;
+  - el admin nace con `debe_cambiar_password: true`;
+  - obligatorios: `empresa.nombre`, `empresa.cuit`, `admin.nombre`,
+    `admin.email` y `admin.password`.
+- **Reset de contraseña:** deja `debe_cambiar_password: true`.
+- **DELETE:** borra la empresa y sus usuarios. Si tiene cualquier otro dato
+  (clientes, catálogos, personal, solicitudes...), no borra nada y responde 409 ·
+  `"La empresa tiene datos asociados. Suspendela en lugar de eliminarla"`.
+- **Usuarios de una empresa** (soporte): valen las mismas reglas que en
+  `/usuarios`, más abajo, salvo "uno mismo" (el superadmin no es usuario de la
+  empresa).
+  - El POST no recibe `id_empleado`, porque el personal es información de la
+    empresa. Por eso un usuario `empleado` se crea desde "Personal": acá
+    responde 400 · `"Un usuario con rol empleado tiene que estar vinculado a un empleado"`.
+  - El PATCH sin `rol` ni `activo` responde 400 · `"No hay datos para actualizar"`.
+- **Métricas:**
+  - `usuarios_activos` del resumen no cuenta a los superadmin;
+  - eventos abiertos = `confirmado` o `en_preparacion`;
+  - `eventos_proximos_30_dias` = abiertos con fecha entre hoy y hoy + 30;
+  - el resumen suma todas las empresas, también las suspendidas;
+  - `clientes` cuenta todos (activos e inactivos); `empleados_activos`, los
+    que trabajan hoy en la empresa;
+  - `ultimo_evento_creado` sale de `eventos.fecha_creacion` (`null` si no
+    tiene eventos).
+- **Filtros:** `?buscar=` busca en nombre y cuit. Un `?activo=` inválido se ignora.
+
+Errores:
+
+- 400 · `"El nombre y el cuit de la empresa son obligatorios"`
+- 400 · `"El nombre, el email y la contrasena del administrador son obligatorios"`
+- 400 · `"La contrasena tiene que tener al menos 6 caracteres"`
+- 400 · `"Ya existe una empresa con ese cuit"`
+- 400 · `"El email ya esta registrado"`
+- 400 · `"El campo activo tiene que ser true o false"`
+
+---
+
+## Mi empresa · `/api/mi-empresa`
+
+### GET /mi-empresa
+
+**Acceso:** `admin`, `coordinador` y `empleado`. Devuelve solo la empresa del token.
+
+Respuesta 200:
+
+```json
+{
+  "id_empresa": 1,
+  "nombre": "Eventos del Centro",
+  "cuit": "30-71234567-8",
+  "email": "contacto@eventosdelcentro.com",
+  "telefono": "351-4001122",
+  "direccion": "Av. Colón 1200, Córdoba",
+  "fecha_creacion": "2026-10-01T12:00:00.000Z"
+}
+```
+
+### PUT /mi-empresa
+
+**Acceso:** solo `admin`. Edita `nombre`*, `email`, `telefono` y `direccion`.
+El `cuit` solo lo cambia el superadmin: si viene en el body, se ignora.
+
+Respuesta 200: el mismo objeto del GET.
+
+- 400 · `"El nombre es obligatorio"`
+
+---
+
+## Personal con acceso al sistema · `/api/empleados` (cambios)
+
+Es el panel donde la empresa da de alta a sus empleados y decide quién entra al
+sistema y con qué rol.
+
+El objeto **Empleado** de la Fase 2 suma el campo `acceso`:
+
+```json
+{
+  "id_empleado": 3,
+  "legajo": "L-003",
+  "nombre": "Carla",
+  "apellido": "Ruiz",
+  "rol": "Coordinadora de tareas",
+  "telefono": "353-4200003",
+  "email": "carla@eventosdelcentro.com",
+  "cargo": "Coordinadora de tareas",
+  "fecha_inicio": "2025-06-15",
+  "fecha_fin": null,
+  "activo": true,
+  "acceso": {
+    "id_usuario": 9,
+    "email": "carla@eventosdelcentro.com",
+    "rol": "empleado",
+    "activo": true
+  }
+}
+```
+
+- `acceso` es `null` si el empleado no tiene usuario.
+- `empleados.rol` es el puesto, en texto libre. `acceso.rol` es el **permiso**
+  en el sistema (`admin`, `coordinador` o `empleado`). Son cosas distintas.
+
+### POST /empleados (cambia)
+
+**Acceso:** solo `admin`. Acepta un bloque `acceso` opcional. Si viene, crea el
+empleado, su vínculo con la empresa y su usuario en **una sola transacción**.
+
+```json
+{
+  "legajo": "L-010",
+  "nombre": "Carla",
+  "apellido": "Ruiz",
+  "email": "carla@eventosdelcentro.com",
+  "cargo": "Coordinadora de tareas",
+  "acceso": {
+    "email": "carla@eventosdelcentro.com",
+    "password": "temporal123",
+    "rol": "empleado"
+  }
+}
+```
+
+Respuesta 201: **Empleado** (con `acceso`).
+
+### POST /empleados/:id/acceso (nuevo)
+
+**Acceso:** solo `admin`. Le da acceso a un empleado que ya existe.
+
+Body:
+
+```json
+{ "email": "carla@eventosdelcentro.com", "password": "temporal123", "rol": "coordinador" }
+```
+
+Respuesta 201: **Empleado** (con `acceso`).
+
+- 409 · `"El empleado ya tiene acceso al sistema"`
+- 409 · `"El empleado no esta activo en la empresa"`
+
+Para cambiar el rol, desactivar el acceso o resetear la contraseña se usa
+`/usuarios`.
+
+Errores comunes del bloque `acceso`:
+
+- 400 · `"El email, la contrasena y el rol del acceso son obligatorios"`
+- 400 · `"La contrasena tiene que tener al menos 6 caracteres"`
+- 400 · `"Rol invalido"` (solo `admin`, `coordinador` o `empleado`)
+- 400 · `"El email ya esta registrado"`
+
+**Baja de un empleado** (`PATCH /empleados/:id/activo` con `false`): también
+desactiva su usuario, si tiene, en la misma transacción.
+
+- Valen las reglas de usuarios: si su usuario es el último admin activo, o es
+  el propio admin que hace la baja, no se hace nada y responde el 409 que
+  corresponde (ver `/usuarios`).
+- **Reactivar** al empleado no reactiva su usuario: devolverle el acceso es una
+  decisión aparte, que se toma en `/usuarios`.
+
+---
+
+## Usuarios de mi empresa · `/api/usuarios`
+
+**Acceso:** solo `admin`. Todo se filtra por la empresa del token.
+
+Objeto **Usuario**:
+
+```json
+{
+  "id_usuario": 9,
+  "nombre": "Carla Ruiz",
+  "email": "carla@eventosdelcentro.com",
+  "rol": "empleado",
+  "activo": true,
+  "id_empleado": 3,
+  "nombre_empleado": "Carla Ruiz",
+  "debe_cambiar_password": true,
+  "fecha_creacion": "2026-10-22T20:00:00.000Z"
+}
+```
+
+| Método | Ruta | Acción | Respuesta |
+| --- | --- | --- | --- |
+| GET | `/usuarios?activo=&rol=&buscar=` | Listar (búsqueda por nombre y email) | 200 · `[Usuario]` |
+| GET | `/usuarios/:id` | Obtener uno | 200 · `Usuario` |
+| POST | `/usuarios` | Crear un usuario sin empleado (por ejemplo, un socio) | 201 · `Usuario` |
+| PUT | `/usuarios/:id` | Editar `nombre`, `email`, `rol` e `id_empleado` | 200 · `Usuario` |
+| PATCH | `/usuarios/:id/activo` | `{ "activo": false }` | 200 · `Usuario` |
+| PUT | `/usuarios/:id/password` | Reset: `{ "password_nueva": "..." }`. Deja `debe_cambiar_password: true` | 200 · `{ "mensaje": "Contrasena actualizada" }` |
+
+Reglas:
+
+- **Roles:** solo `admin`, `coordinador` o `empleado`. Nunca `superadmin`.
+- **Rol `empleado`:** tiene que estar vinculado a un empleado (`id_empleado`),
+  porque sin eso no tiene tareas.
+  - 400 · `"Un usuario con rol empleado tiene que estar vinculado a un empleado"`
+- **Vínculo con un empleado:** si viene `id_empleado`, tiene que ser un empleado
+  activo de la empresa y no estar vinculado a otro usuario.
+- **Uno mismo:** un admin no puede desactivarse ni quitarse el rol `admin` a sí mismo.
+- **Último admin:** siempre queda al menos un `admin` activo en la empresa.
+- **Contraseña puesta por otro:** todo usuario creado acá, desde el panel de
+  superadmin o con el `acceso` de Personal nace con `debe_cambiar_password: true`.
+- **PUT** reemplaza los cuatro campos: si `id_empleado` no viene, el usuario
+  queda sin vínculo (salvo que el rol sea `empleado`, que da 400).
+- **Activar** un usuario cuyo empleado está dado de baja responde 400 ·
+  `"El empleado no existe o no esta activo en la empresa"`.
+- Filtros inválidos (`?rol=jefe`) se ignoran, como en los demás listados.
+
+Errores:
+
+- 400 · `"El nombre, el email, la contrasena y el rol son obligatorios"` (POST)
+- 400 · `"El nombre, el email y el rol son obligatorios"` (PUT)
+- 400 · `"El campo activo tiene que ser true o false"`
+- 400 · `"La contrasena tiene que tener al menos 6 caracteres"` (también en el
+  reset, si `password_nueva` no viene o es corta)
+- 400 · `"Rol invalido"`
+- 400 · `"El email ya esta registrado"`
+- 400 · `"El empleado no existe o no esta activo en la empresa"`
+- 400 · `"Ese empleado ya esta vinculado a otro usuario"`
+- 409 · `"No podes desactivarte ni quitarte el rol de admin a vos mismo"`
+- 409 · `"La empresa tiene que tener al menos un admin activo"`
+
+---
+
+## Panel del empleado
+
+El `empleado` trabaja solo con estas tres rutas.
+
+### GET /tareas/mias (cambia)
+
+Para cualquier rol devuelve las tareas del empleado vinculado al usuario. Cada
+**Tarea** conserva todos los campos de antes (el objeto Tarea más
+`nombre_cliente`, `nombre_tipo_evento` y `fecha_evento_confirmada`) y suma los
+datos del evento y del proveedor que el empleado necesita para trabajar,
+**sin importes**. En el ejemplo van solo los campos nuevos y los principales:
+
+```json
+{
+  "id_tarea": 5,
+  "descripcion": "Confirmar asistencia de Deco Fiestas",
+  "nombre_tipo_tarea": "Confirmar asistencia del proveedor",
+  "orden": 2,
+  "fecha_prevista": "2026-10-25",
+  "fecha_finalizacion": null,
+  "estado_tarea": "en_curso",
+  "observaciones": null,
+  "vencida": false,
+  "puede_avanzar": true,
+  "evento": {
+    "id_evento": 1,
+    "nombre_tipo_evento": "Casamiento",
+    "nombre_cliente": "Lucía Fernández",
+    "fecha_evento_confirmada": "2026-11-14",
+    "sede_acordada": "Estancia El Molino",
+    "estado": "en_preparacion",
+    "nombre_coordinador": "Ana Gómez"
+  },
+  "servicio": {
+    "id_servicio_x_evento": 2,
+    "nombre_servicio": "Decoración",
+    "descripcion": "Ambientación de salón y ceremonia",
+    "estado_proveedor": "solicitada",
+    "fecha_confirmacion_proveedor": null,
+    "observaciones": null,
+    "proveedor": {
+      "id_proveedor": 3,
+      "razon_social": "Deco Fiestas",
+      "telefono": "351-5551002",
+      "email": "hola@decofiestas.com"
+    },
+    "pasos": [
+      { "orden": 1, "nombre_tipo_tarea": "Contactar al proveedor", "estado_tarea": "completada" },
+      { "orden": 2, "nombre_tipo_tarea": "Confirmar asistencia", "estado_tarea": "en_curso" },
+      { "orden": 3, "nombre_tipo_tarea": "Seguimiento previo", "estado_tarea": "pendiente" },
+      { "orden": 4, "nombre_tipo_tarea": "Cierre del servicio", "estado_tarea": "pendiente" }
+    ]
+  }
+}
+```
+
+- `servicio` es `null` en las tareas libres. `servicio.proveedor` es `null` si
+  el servicio no tiene proveedor asignado.
+- `servicio.pasos` es la secuencia completa del servicio, ordenada, para el
+  `Steps` del front. No dice quién es responsable de cada paso (`[]` si el
+  servicio todavía no tiene tareas generadas).
+- `puede_avanzar` es `false` si el paso anterior de la secuencia no está
+  completado, aunque ese paso sea de otro empleado. Así el front deshabilita el
+  cambio de estado y muestra por qué. En las tareas libres es siempre `true`.
+  Que la tarea ya esté completada se ve en `estado_tarea`.
+- Solo trae tareas de eventos abiertos. Filtros: `?estado_tarea=` y
+  `?vencidas=true`. Un filtro inválido se ignora.
+
+### PATCH /tareas/:id/estado (cambia)
+
+- **`empleado`:** solo puede cambiar el estado de **sus** tareas. Si no es el
+  responsable, 404 · `"Tarea no encontrada"`.
+- **`admin` y `coordinador`:** pueden cambiar cualquier tarea de la empresa, como antes.
+- La regla de secuencia (regla 5) vale para todos.
+
+### PATCH /servicios-evento/:id (cambia)
+
+- **`empleado`:** puede **gestionar el proveedor** solo si es responsable de al
+  menos una tarea de ese servicio. Si no, 404 · `"Servicio no encontrado"`.
+  Solo puede modificar `estado_proveedor` y `observaciones`.
+  - Si manda otro campo (`id_proveedor`, `costo_acordado_proveedor`,
+    `importe_acordado_cliente`), responde 403 ·
+    `"Solo podes actualizar el estado y las observaciones del proveedor"`.
+    Este chequeo va antes que el 404: un 403 no revela si el servicio existe.
+  - La respuesta no incluye importes ni costos: devuelve el objeto `servicio`
+    con el formato de `/tareas/mias`.
+- **`admin` y `coordinador`:** sin cambios respecto de la Fase 6.
+
+---
+
+## Cambios en la base para esta fase
+
+- `usuarios.rol`: el CHECK pasa a `('superadmin', 'admin', 'coordinador', 'empleado')`.
+  Los usuarios con rol `usuario` del seed pasan a `coordinador`.
+- `usuarios.id_empresa` acepta `NULL`, con este CHECK:
+  - si el rol es `superadmin`: `id_empresa` e `id_empleado` en `NULL`;
+  - si es otro rol: `id_empresa` obligatorio;
+  - si el rol es `empleado`: `id_empleado` obligatorio.
+- Nueva columna `usuarios.debe_cambiar_password BOOLEAN NOT NULL DEFAULT FALSE`.
+- Índice único parcial sobre `usuarios(id_empleado)` cuando no es `NULL`: un
+  empleado tiene a lo sumo un usuario.
+- Nueva columna `eventos.fecha_creacion TIMESTAMP NOT NULL DEFAULT NOW()`, para
+  la métrica `ultimo_evento_creado` del panel de superadmin.
+- Para una base que ya tiene datos, `npm run db:actualizar` aplica estos
+  cambios sin borrar nada (y pasa los `usuario` a `coordinador`). No crea un
+  superadmin: hay que insertarlo a mano (ver el README de `api-eventos`).
+- Seed (contraseña `admin123` en todos):
+  - un superadmin: `soporte@eventosapp.com`;
+  - en la empresa 1, un usuario de cada rol: admin, coordinador y empleado. El
+    empleado tiene tareas con proveedor y tareas libres;
+  - una cuarta empresa **suspendida**, con su admin.
+  - La lista completa de usuarios de prueba está en el README de `api-eventos`.
+
+---
+
 ## Historial de cambios del contrato
 
 | Fecha | Fase | Cambio | Avisado al front |
@@ -1155,6 +1703,8 @@ Respuesta 200: **Evento (detalle)**.
 | 2026-10-20 | 7 | Se aclara el alcance de `?dias` (solo los próximos; acepta de 1 a 365, inválido = 30) y que `total_tareas` incluye las tareas libres. Sin cambios en los campos | ✘ |
 | 2026-10-20 | 8 | Mensajes sin tildes. Se aclara: no se valida la fecha al marcar `realizado`, un texto hecho solo de espacios cuenta como vacío y el feedback es parcial | ✘ |
 | 2026-10-20 | 9 | Revisión final. Errores generales documentados (401, `:id` inválido → 404, `"Hay datos con un formato invalido"`, JSON inválido, `"Ruta no encontrada"`). Todo 500 responde `"Error interno del servidor"` (empresas y auth tenían textos propios). Mensajes exactos de obligatorios de los catálogos. `nombre_cliente` no agrega el `-` de los clientes empresa. Pendientes de la Fase 1 cerrados | ✘ |
+| 2026-10-22 | 10 | Superadmin y roles `admin`, `coordinador` y `empleado` con tabla de permisos. Se eliminan `POST /auth/register` y `/api/empresas`. Nuevos: `/auth/password`, `/superadmin/*`, `/mi-empresa`, `/usuarios` y `POST /empleados/:id/acceso`. Cambian: login (`debe_cambiar_password`, 403 si la empresa está suspendida), `POST /empleados` (bloque `acceso`), `/tareas/mias` (evento y proveedor), y los permisos de `PATCH /tareas/:id/estado` y `PATCH /servicios-evento/:id` para el empleado | ✘ |
+| 2026-10-22 | 10 | **Implementada.** Agregados al contrato: 403 de empresa suspendida con `codigo: "empresa_suspendida"` (también en `/auth/perfil` y `/auth/password`); rol y estado leídos de la base en cada pedido (usuario desactivado → 401); 403 antes que 404; `/tareas/mias` conserva los campos de antes y suma `servicio.pasos`; definición de `puede_avanzar` y de las métricas; `eventos.fecha_creacion`; el superadmin no crea usuarios `empleado`; PATCH de soporte vacío → 400; mensaje del PUT de `/usuarios`; reglas de la baja del empleado y de activar un usuario con el empleado de baja; texto demasiado largo → 400 de formato | ✘ |
 
 ### Pendientes del back sobre la Fase 1 ya implementada
 

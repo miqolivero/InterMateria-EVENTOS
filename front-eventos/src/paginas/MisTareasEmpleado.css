@@ -1,0 +1,19 @@
+.filtro-tareas { margin-bottom: 20px; overflow-x: auto; padding-bottom: 2px; }
+.evento-empleado { margin-bottom: 20px; }
+.evento-titulo { display: flex; flex-direction: column; line-height: 1.35; padding: 12px 0; min-width: 0; }
+.evento-tipo { font-size: 13px; font-weight: 400; }
+.evento-datos { display: flex; flex-wrap: wrap; gap: 6px 16px; color: #595959; font-size: 13px; margin-bottom: 16px; }
+.tarea-empleado { border: 1px solid #e5e5e5; border-radius: 6px; padding: 14px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 6px; }
+.tarea-vencida { border-color: #ffa39e; background: #fff1f0; }
+.tarea-cabecera { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.tarea-descripcion { font-size: 15px; }
+.tarea-fecha, .tarea-servicio { font-size: 13px; }
+.tarea-observaciones { margin: 0; font-size: 13px; color: #595959; }
+.tarea-pasos { margin: 8px 0 4px; }
+.tarea-acciones { display: flex; flex-direction: column; align-items: stretch; gap: 2px; margin-top: 6px; }
+.envoltorio-deshabilitado { display: block; cursor: not-allowed; }
+.titulo-proveedores { margin: 8px 0 12px; }
+.bloque-proveedor { border: 1px solid #e5e5e5; border-radius: 6px; padding: 14px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 8px; }
+.contacto-proveedor { display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+.contacto-proveedor a { padding: 4px 0; }
+.formulario-proveedor { margin-top: 4px; }

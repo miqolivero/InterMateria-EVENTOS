@@ -1,5 +1,4 @@
 import { Router } from "express";
-import { verificarToken } from "../middlewares/auth.middleware.js";
 import {
   obtenerEventos,
   obtenerEventoPorId,
@@ -21,7 +20,6 @@ const router = Router();
 router.param("id", validarParamId("Evento no encontrado"));
 
 // Todas las rutas piden token: de ahi sale el id_empresa de los eventos.
-router.use(verificarToken);
 
 // Un evento no se crea por aca: nace al aceptar un presupuesto
 // (POST /api/presupuestos/:id/aceptar, ver presupuestos.routes.js).

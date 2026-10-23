@@ -9,3 +9,5 @@ export const editarCatalogo = (recurso, id, datos) => api.put(`${rutas[recurso]}
 export const activarCatalogo = (recurso, id, activo) => api.patch(`${rutas[recurso]}/${id}/activo`, { activo });
 export const obtenerServiciosProveedor = (id) => api.get(`/proveedores/${id}/servicios`);
 export const guardarServiciosProveedor = (id, ids_servicios) => api.put(`/proveedores/${id}/servicios`, { ids_servicios });
+// Personal con acceso (Fase 10): le da usuario a un empleado que ya existe
+export const darAcceso = (id, acceso) => api.post(`/empleados/${id}/acceso`, acceso);
