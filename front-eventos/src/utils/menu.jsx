@@ -1,5 +1,5 @@
-import { BankOutlined, BookOutlined, CalendarOutlined, CheckSquareOutlined, DashboardOutlined,
-  FileTextOutlined, ShopOutlined, TeamOutlined, UserOutlined, UserSwitchOutlined } from "@ant-design/icons";
+import { AppstoreOutlined, BankOutlined, BookOutlined, CalendarOutlined, CheckSquareOutlined, DashboardOutlined,
+  FileTextOutlined, ScheduleOutlined, ShopOutlined, TeamOutlined, UserOutlined, UserSwitchOutlined } from "@ant-design/icons";
 
 // Roles y menú (Fase 10). UNA sola definición: cada opción dice qué roles la
 // ven. De acá salen el menú de cada layout y las guardas de las rutas, así no
@@ -42,7 +42,9 @@ export const opciones = [
   { ruta: "/superadmin", exacta: true, etiqueta: "Resumen", icono: <DashboardOutlined />, roles: [SUPERADMIN] },
   { ruta: "/superadmin/empresas", etiqueta: "Empresas", icono: <BankOutlined />, roles: [SUPERADMIN] },
   { ruta: "/seguimiento", etiqueta: "Seguimiento", icono: <DashboardOutlined />, roles: OPERACION },
+  { ruta: "/eventos-por-estado", etiqueta: "Por estado", icono: <AppstoreOutlined />, roles: OPERACION },
   { ruta: "/mis-tareas", etiqueta: "Mis tareas", icono: <CheckSquareOutlined />, roles: EMPRESA },
+  { ruta: "/mis-eventos", etiqueta: "Mis eventos", icono: <ScheduleOutlined />, roles: [EMPLEADO] },
   { ruta: "/solicitudes", tambien: ["/presupuestos"], etiqueta: "Solicitudes", icono: <FileTextOutlined />, roles: OPERACION },
   { ruta: "/eventos", etiqueta: "Eventos", icono: <CalendarOutlined />, roles: OPERACION },
   { ruta: "/clientes", etiqueta: "Clientes", icono: <UserOutlined />, roles: OPERACION },

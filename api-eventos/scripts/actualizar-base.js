@@ -32,7 +32,7 @@ try {
   await cliente.query("SELECT pg_advisory_xact_lock(720261022)");
   const schema = await readFile(new URL("../database/schema.sql", import.meta.url), "utf8");
   const tablas = [...schema.matchAll(/CREATE TABLE (\w+)\s*\([\s\S]*?\);/g)];
-  if (tablas.length !== 16) throw new Error("El esquema cambió: revisar la actualización antes de ejecutarla.");
+  if (tablas.length !== 18) throw new Error("El esquema cambió: revisar la actualización antes de ejecutarla.");
   const antes = (await cliente.query("SELECT tablename FROM pg_tables WHERE schemaname = 'public'")).rows.map(r => r.tablename);
   if (antes.includes("clientes")) {
     const columnas = (await cliente.query("SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='clientes'")).rows.map(r => r.column_name);
@@ -65,6 +65,29 @@ try {
     "ALTER TABLE usuarios ADD CONSTRAINT chk_usuarios_empleado CHECK (rol <> 'empleado' OR id_empleado IS NOT NULL)",
     "CREATE UNIQUE INDEX IF NOT EXISTS uq_usuarios_empleado ON usuarios(id_empleado) WHERE id_empleado IS NOT NULL",
     "ALTER TABLE eventos ADD COLUMN IF NOT EXISTS fecha_creacion TIMESTAMP NOT NULL DEFAULT NOW()"
+  ]) await cliente.query(sql);
+  // Fase 11: estados del proveedor, servicios cancelados y asistentes en el
+  // evento. Las tablas cambios_evento y afectados_cambio las crea el bucle de
+  // CREATE TABLE IF NOT EXISTS de arriba. El UPDATE de estados va entre el
+  // DROP y el ADD del CHECK: con el CHECK viejo los estados nuevos no entran,
+  // y con el nuevo no entran los viejos. Repetido, el CASE no cambia nada.
+  for (const sql of [
+    "ALTER TABLE servicios_x_evento DROP CONSTRAINT IF EXISTS servicios_x_evento_estado_proveedor_check",
+    `UPDATE servicios_x_evento SET estado_proveedor = CASE estado_proveedor
+       WHEN 'solicitada' THEN 'pendiente' WHEN 'confirmada' THEN 'confirmado'
+       WHEN 'en_seguimiento' THEN 'confirmado' WHEN 'finalizada' THEN 'completado'
+       WHEN 'rechazada' THEN 'rechazado' ELSE estado_proveedor END`,
+    "ALTER TABLE servicios_x_evento ALTER COLUMN estado_proveedor SET DEFAULT 'pendiente'",
+    "ALTER TABLE servicios_x_evento ADD CONSTRAINT servicios_x_evento_estado_proveedor_check CHECK (estado_proveedor IN ('pendiente', 'confirmado', 'completado', 'rechazado'))",
+    "ALTER TABLE servicios_x_evento ADD COLUMN IF NOT EXISTS estado_servicio VARCHAR(20) NOT NULL DEFAULT 'acordado' CHECK (estado_servicio IN ('acordado', 'cancelado'))",
+    // Primero sin NOT NULL, se copia de la solicitud (que ya es NOT NULL y > 0)
+    // y recien ahi se exige
+    "ALTER TABLE eventos ADD COLUMN IF NOT EXISTS cantidad_asistentes INTEGER",
+    "UPDATE eventos e SET cantidad_asistentes = s.cantidad_asistentes FROM solicitudes s WHERE s.id_solicitud = e.id_solicitud AND e.cantidad_asistentes IS NULL",
+    "ALTER TABLE eventos ALTER COLUMN cantidad_asistentes SET NOT NULL",
+    "ALTER TABLE eventos DROP CONSTRAINT IF EXISTS eventos_cantidad_asistentes_check",
+    "ALTER TABLE eventos ADD CONSTRAINT eventos_cantidad_asistentes_check CHECK (cantidad_asistentes > 0)",
+    "CREATE UNIQUE INDEX IF NOT EXISTS uq_tareas_servicio_paso ON tareas(id_servicio_x_evento, id_tipo_tarea) WHERE id_tipo_tarea IS NOT NULL"
   ]) await cliente.query(sql);
   await cliente.query("COMMIT");
   console.log("Base actualizada. Se conservaron los registros existentes.");

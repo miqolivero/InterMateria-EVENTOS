@@ -107,6 +107,9 @@ completadas, pero el proveedor sigue en `solicitada`.
 
 ## 5. Secuencia de tareas con el proveedor
 
+> **Reemplazada en la Fase 11** (ver la decisión 17): la secuencia dejó de ser
+> obligatoria. Se deja la explicación porque así funcionó hasta la Fase 10.
+
 **Problema.** Con cada proveedor hay 4 pasos que tienen sentido en orden:
 contactar, confirmar asistencia, seguimiento previo y cierre.
 
@@ -288,7 +291,9 @@ que necesita para trabajar, pero ningún costo ni importe. Se garantiza en tres
 capas:
 
 1. **Por ruta:** solo llega a login, perfil, cambio de contraseña, Mi empresa,
-   `/tareas/mias`, `PATCH /tareas/:id/estado` y `PATCH /servicios-evento/:id`.
+   `/tareas/mias`, `PATCH /tareas/:id/estado` y `PATCH /servicios-evento/:id/estado`
+   (desde la Fase 11, también al resumen y las revisiones de sus eventos, y a
+   `PATCH /revisiones/:id`).
    Todo lo demás responde 403 (`permitirRoles` en `index.js`).
 2. **Por consulta:** esas respuestas se arman campo por campo con
    `json_build_object`, sin `SELECT *`, así una columna nueva no se cuela.
@@ -301,3 +306,99 @@ cobra al cliente) son información comercial sensible, y al empleado no le
 hacen falta para su jornada. El filtro va en el `WHERE` y no en un `if`
 después de la consulta porque así es imposible que la fila ajena llegue al
 código: no hay un camino que se olvide de chequear.
+
+## 14. El sistema registra y avisa, pero no decide (Fase 11)
+
+Después de confirmar un evento, todo cambio de lo acordado (fecha, sede,
+condiciones, asistentes, servicios y proveedores) pide un **motivo** y queda en
+`cambios_evento` con quién, cuándo, el valor anterior y el nuevo. Los
+compromisos que puede afectar quedan **a revisar** en `afectados_cambio`:
+
+- si cambia la fecha o la sede, todos los servicios acordados;
+- si cambia un servicio, solo ese;
+- las tareas, solo las que el usuario tilda.
+
+Nada más se mueve solo: ninguna tarea se reprograma, ningún proveedor se da por
+confirmado, las tareas de un servicio cancelado siguen como estaban, y revisar
+un compromiso solo guarda una nota (`PATCH /revisiones/:id` no toca la tarea
+ni el proveedor).
+
+**Por qué:** es el criterio que dio el cliente en la segunda validación. El
+sistema no sabe si el catering puede ir el 22 en vez del 15, ni si la tarea de
+"confirmar el menú" se corre una semana o queda igual: eso lo sabe la persona
+que habla con el proveedor. Si el sistema decidiera, podría dar por resuelto
+algo que nadie miró. Lo que sí puede hacer es no dejar que se pierda: lo marca y
+lo muestra hasta que alguien deja constancia de que lo revisó.
+
+**El cambio y su registro van en la misma transacción.** El `UPDATE` del
+evento (o del servicio), los `INSERT` en `cambios_evento` y los de
+`afectados_cambio` corren con el mismo `client` entre `BEGIN` y `COMMIT`. Si
+falla cualquier registro, el `ROLLBACK` deshace también el cambio. Así no
+puede existir una fecha cambiada sin su motivo, ni un registro de algo que no
+cambió. Se probó forzando un error con un trigger temporal: el pedido responde
+500 y el evento queda exactamente como estaba.
+
+El coordinador del evento se cambia sin historial: es una decisión interna de
+la empresa, no un acuerdo con el cliente. Por eso cambiar solo el coordinador
+no pide motivo.
+
+## 15. "A revisar" se calcula, no se guarda (Fase 11)
+
+Ni `servicios_x_evento` ni `tareas` tienen una columna `a_revisar`. Un
+servicio o una tarea está a revisar si tiene alguna fila en `afectados_cambio`
+con `revisado = false`. La condición está escrita una sola vez, en
+`api-eventos/src/utils/indicadores.js`, junto con "vencida" y los indicadores
+del evento (`JOIN_INDICADORES`), y la usan el resumen del evento, el tablero,
+los listados de servicios y de tareas y el panel del empleado.
+
+**Por qué:** es la misma idea que "vencida" (regla 1). Si fuera una columna,
+habría que acordarse de prenderla en cada cambio y de apagarla en cada
+revisión, y un olvido dejaría el dato desincronizado. Calculada, es imposible
+que diga otra cosa que lo que dicen los registros. Además, la fila de
+`afectados_cambio` guarda **por qué** está a revisar (qué cambio la afectó) y
+**quién y cuándo** la revisó, cosa que un booleano no puede.
+
+Los indicadores son fragmentos de SQL en un módulo y no una vista: así reusan
+la misma `CONDICION_VENCIDA` que ya existía, y el script `db:actualizar` no
+tiene que crear ni mantener vistas.
+
+## 16. Los servicios se cancelan, no se borran (Fase 11)
+
+Quitar un servicio después de confirmar lo pasa a `estado_servicio =
+cancelado`. Sigue apareciendo en el evento (en gris) y en el historial, pero
+no cuenta en los indicadores ni en "sin confirmar", y no admite más cambios
+(409). Sus tareas no se tocan: las que el usuario elige quedan a revisar.
+
+**Por qué:** el servicio fue parte de lo acordado con el cliente y tiene tareas,
+cambios y revisiones que lo apuntan. Borrarlo rompería esas referencias (o
+obligaría a borrar el historial en cascada) y se perdería que alguna vez
+estuvo. Es el mismo criterio de la baja lógica de los catálogos y de los
+presupuestos "reemplazados": en un sistema de seguimiento, lo que pasó no se
+borra. Por la misma razón el proveedor reemplazado queda en el historial
+(`id_proveedor_anterior`), y una tarea que tiene revisiones no se puede
+eliminar.
+
+## 17. Se sacó la secuencia obligatoria de tareas (Fase 11)
+
+Hasta la Fase 10, el paso 2 con un proveedor no podía empezar sin el paso 1
+completado (regla 5). En la segunda validación el cliente dijo que en la
+práctica los pasos no siempre van en orden: a veces el proveedor confirma en el
+primer llamado, a veces el seguimiento empieza antes de tener la confirmación
+por escrito, y a veces un paso no hace falta. La secuencia lo obligaba a marcar
+pasos como completados sin haberlos hecho, solo para destrabar el siguiente, y
+eso hacía que los datos mintieran.
+
+Ahora `tipos_tarea` es una **guía**: "generar tareas" deja elegir qué pasos
+crear (y sumar los que falten después), y `PATCH /tareas/:id/estado` acepta
+cualquier estado. Se borraron la validación del back, `puede_avanzar`,
+`tareas_generadas` y `paso_actual`, y `puedeCambiarTarea` del front. Un
+índice único `(id_servicio_x_evento, id_tipo_tarea)` evita dos tareas del
+mismo paso.
+
+**Por qué no se perdió control:** lo que la secuencia intentaba asegurar ("no
+se da por hecho algo que no pasó") ahora lo cuidan los indicadores, que miran
+el **estado del proveedor** y no las tareas: un evento con todas las tareas
+completas y un proveedor pendiente sigue con `alerta: true`. El porcentaje de
+avance se reemplazó por "tareas X de Y" y "servicios confirmados X de Y"
+justamente por eso: con el porcentaje, 100% de tareas parecía "listo" aunque un
+proveedor no hubiera confirmado.

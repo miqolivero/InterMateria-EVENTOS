@@ -42,6 +42,13 @@ Node 18+, Express 4, ES Modules (`"type": "module"`), `pg`, `dotenv`, `cors`,
     sus servicios) van en el controller, dentro del `WHERE`, no en el
     middleware. Si no le corresponde, 404, igual que con otra empresa.
   - Nunca devolver importes ni costos en una respuesta para el rol `empleado`.
+- **Cambios del evento** (Fase 11): todo endpoint que modifica lo acordado
+  registra el cambio en `cambios_evento` y sus afectados en `afectados_cambio`
+  **en la misma transacción** que la modificación. Si falla el registro, no se
+  modifica nada. La `descripcion` de un cambio nunca lleva importes.
+- Los indicadores (`servicios_sin_confirmar`, `alerta`, etc.) se calculan con
+  **una sola definición** reutilizada (una función o vista SQL) en el resumen,
+  el tablero y los listados. Están definidos en la Fase 11 de `docs/API.md`.
   - Se montan **a nivel router** en `index.js`
     (`app.use("/api/clientes", verificarToken, soloEmpresa, clientesRoutes)`),
     no endpoint por endpoint. Así ninguna ruta nueva queda sin protección por

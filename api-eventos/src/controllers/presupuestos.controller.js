@@ -178,7 +178,7 @@ const validezInvalida = (validezDias) =>
 
 // Lo que se puede validar sin ir a la base: obligatorios y formatos. Va antes
 // que todo para no abrir una transaccion por un body mal armado.
-const validarFormatoRenglon = (body) => {
+export const validarFormatoRenglon = (body) => {
   const { id_servicio, cantidad, costo_proveedor, importe_cliente } = body;
 
   if (esVacio(id_servicio) || esVacio(importe_cliente)) {
@@ -204,7 +204,7 @@ const validarFormatoRenglon = (body) => {
 // activo, y el proveedor (si viene) tiene que ser de la empresa, estar activo
 // y OFRECER ese servicio (proveedores_x_servicio). Sin esto se podria asignar
 // el fotografo al catering, o un proveedor de otra empresa.
-const validarRenglonEnEmpresa = async (client, body, idEmpresa) => {
+export const validarRenglonEnEmpresa = async (client, body, idEmpresa) => {
   const { id_servicio, id_proveedor } = body;
 
   const servicioOk =

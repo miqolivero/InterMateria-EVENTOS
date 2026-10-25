@@ -63,7 +63,8 @@ Estos errores aplican a todos los endpoints y **no se repiten** en cada uno:
 | Solicitud | `estado` | `pendiente`, `presupuestada`, `aceptada`, `rechazada`, `cancelada` |
 | Presupuesto | `estado` | `borrador`, `presentado`, `aceptado`, `rechazado`, `reemplazado` |
 | Evento | `estado` | `confirmado`, `en_preparacion`, `realizado`, `cancelado` |
-| Servicio del evento | `estado_proveedor` | `solicitada`, `confirmada`, `en_seguimiento`, `finalizada`, `rechazada` |
+| Servicio del evento | `estado_proveedor` | `pendiente`, `confirmado`, `completado`, `rechazado` (desde la Fase 11; antes: `solicitada`, `confirmada`, `en_seguimiento`, `finalizada`, `rechazada`) |
+| Servicio del evento | `estado_servicio` | `acordado`, `cancelado` (Fase 11) |
 | Tarea | `estado_tarea` | `pendiente`, `en_curso`, `completada` (`vencida` es un booleano calculado) |
 
 ---
@@ -90,6 +91,9 @@ Estos errores aplican a todos los endpoints y **no se repiten** en cada uno:
 | 10 | Panel de superadmin | `/superadmin/resumen`, `/superadmin/empresas` |
 | 10 | Mi empresa, personal y usuarios | `/mi-empresa`, `/empleados` (acceso), `/usuarios` · se elimina `/empresas` |
 | 10 | Panel del empleado | `/tareas/mias`, `/tareas/:id/estado`, `/servicios-evento/:id` |
+| 11 | Cambios del evento | `PUT /eventos/:id` (con motivo), `/eventos/:id/servicios`, `/servicios-evento/:id`, `/proveedor`, `/cancelar`, `/estado`, `/eventos/:id/cambios` |
+| 11 | Revisión de afectados | `/eventos/:id/revisiones`, `/revisiones/:id` |
+| 11 | Resumen y consultas | `/eventos/:id/resumen`, `/seguimiento/por-estado` |
 
 ---
 
@@ -866,6 +870,11 @@ DELETE de esta fase responden 409 ·
 ## Servicios del evento
 
 ### PATCH /servicios-evento/:id
+
+> ⚠️ **Se reemplaza en la Fase 11** por `PATCH /servicios-evento/:id/estado`,
+> `PUT /servicios-evento/:id` y `PUT /servicios-evento/:id/proveedor`. Los
+> estados del proveedor también cambian. La regla de secuencia de tareas se
+> elimina.
 
 Actualización parcial: se mandan solo los campos que cambian.
 
@@ -1649,9 +1658,12 @@ datos del evento y del proveedor que el empleado necesita para trabajar,
 - **`empleado`:** solo puede cambiar el estado de **sus** tareas. Si no es el
   responsable, 404 · `"Tarea no encontrada"`.
 - **`admin` y `coordinador`:** pueden cambiar cualquier tarea de la empresa, como antes.
-- La regla de secuencia (regla 5) vale para todos.
+- La regla de secuencia (regla 5) vale para todos. **Se elimina en la Fase 11.**
 
 ### PATCH /servicios-evento/:id (cambia)
+
+> **Fase 11:** este endpoint se elimina. Lo que acá se describe para el
+> `empleado` pasa tal cual a `PATCH /servicios-evento/:id/estado`.
 
 - **`empleado`:** puede **gestionar el proveedor** solo si es responsable de al
   menos una tarea de ese servicio. Si no, 404 · `"Servicio no encontrado"`.
@@ -1691,6 +1703,595 @@ datos del evento y del proveedor que el empleado necesita para trabajar,
 
 ---
 
+# Fase 11 · Cambios del evento, compromisos a revisar y seguimiento real
+
+Surge de la segunda validación con el cliente. Su criterio, que vale para toda la fase:
+
+> **El sistema registra lo que sucede y deja visible qué compromisos quedaron
+> afectados, pero no decide nada solo:** no reorganiza tareas, no renegocia con
+> proveedores y no da nada por confirmado.
+
+Resumen de lo que cambia:
+
+| # | Pedido del cliente | Cómo se resuelve |
+| --- | --- | --- |
+| 1 | Registrar los cambios después de confirmar (fecha, sede, condiciones, asistentes, servicios) con motivo obligatorio, quién y cuándo | Tabla `cambios_evento` y endpoints de cambio con `motivo` |
+| 2 | Marcar compromisos "a revisar" y dejar constancia de la revisión | Tabla `afectados_cambio`. Si cambia la fecha o la sede se marcan todos los servicios; si cambia un servicio, solo ese. Las tareas se eligen a mano |
+| 3 | Agregar y quitar servicios después de confirmar | Alta de servicio y cancelación sin borrar (`estado_servicio = 'cancelado'`) |
+| 4 | Estados del proveedor más simples y pasos opcionales | `pendiente`, `confirmado`, `completado`, `rechazado`. **Se elimina la regla de secuencia** |
+| 5 | Si un proveedor rechaza, asignar otro sin perder el anterior | Reemplazo de proveedor registrado en el historial |
+| 6 | El empleado ve el contexto completo del evento, sin importes | `GET /eventos/:id/resumen` con el alcance del empleado |
+| 7 | Dos indicadores y una alerta en lugar de un porcentaje | `tareas X de Y`, `servicios X de Y` y `alerta` |
+| 8 | Consulta por estado que distinga lo que espera respuesta del cliente | `GET /seguimiento/por-estado` |
+
+## Cambios en la base
+
+```sql
+-- Estados del proveedor (migración de datos existentes)
+--   solicitada -> pendiente, confirmada -> confirmado,
+--   en_seguimiento -> confirmado, finalizada -> completado, rechazada -> rechazado
+servicios_x_evento.estado_proveedor CHECK IN ('pendiente','confirmado','completado','rechazado')
+                                    DEFAULT 'pendiente'
+
+-- Un servicio quitado no se borra
+servicios_x_evento.estado_servicio  VARCHAR(20) NOT NULL DEFAULT 'acordado'
+                                    CHECK IN ('acordado','cancelado')
+
+-- La cantidad de asistentes confirmada pasa a vivir en el evento
+-- (se copia de la solicitud al aceptar; la migración la copia para los eventos existentes)
+eventos.cantidad_asistentes INTEGER NOT NULL CHECK (> 0)
+
+-- Historial de cambios del evento
+CREATE TABLE cambios_evento (
+    id_cambio            SERIAL PRIMARY KEY,
+    id_evento            INTEGER NOT NULL REFERENCES eventos,
+    id_usuario           INTEGER NOT NULL REFERENCES usuarios,   -- quién
+    fecha_hora           TIMESTAMP NOT NULL DEFAULT NOW(),        -- cuándo
+    tipo                 VARCHAR(30) NOT NULL CHECK IN (
+                           'fecha','sede','condiciones','cantidad_asistentes',
+                           'servicio_agregado','servicio_modificado',
+                           'servicio_cancelado','proveedor_cambiado'),
+    id_servicio_x_evento INTEGER REFERENCES servicios_x_evento,  -- si el cambio es de un servicio
+    id_proveedor_anterior INTEGER REFERENCES proveedores,        -- solo proveedor_cambiado
+    id_proveedor_nuevo    INTEGER REFERENCES proveedores,        -- solo proveedor_cambiado
+    descripcion          VARCHAR(300) NOT NULL,  -- texto legible, NUNCA con importes
+    valor_anterior       TEXT,
+    valor_nuevo          TEXT,
+    motivo               TEXT NOT NULL CHECK (btrim(motivo) <> '')  -- obligatorio y no vacío
+);
+
+-- Qué compromisos quedaron afectados por cada cambio y su revisión
+CREATE TABLE afectados_cambio (
+    id_afectado          SERIAL PRIMARY KEY,
+    id_cambio            INTEGER NOT NULL REFERENCES cambios_evento,
+    id_servicio_x_evento INTEGER REFERENCES servicios_x_evento,
+    id_tarea             INTEGER REFERENCES tareas,
+    revisado             BOOLEAN NOT NULL DEFAULT FALSE,
+    id_usuario_revision  INTEGER REFERENCES usuarios,
+    fecha_revision       TIMESTAMP,
+    nota_revision        TEXT,
+    -- exactamente uno de los dos: un servicio o una tarea
+    CHECK ((id_servicio_x_evento IS NULL) <> (id_tarea IS NULL)),
+    -- si está revisado, se sabe quién y cuándo
+    CHECK (NOT revisado OR (id_usuario_revision IS NOT NULL AND fecha_revision IS NOT NULL))
+);
+```
+
+- **"A revisar" no es una columna:** un servicio o una tarea está a revisar si
+  tiene alguna fila en `afectados_cambio` con `revisado = false`. Es la misma
+  idea que "vencida": se calcula, no se guarda.
+- Se agregan índices sobre las FK de las dos tablas nuevas.
+- Hay un script `npm run db:actualizar` para pasar una base existente sin
+  borrar datos (estados, columnas nuevas y copia de la cantidad de asistentes),
+  igual que en la Fase 10.
+- **Seed:** el evento de la demo tiene:
+  - un cambio de fecha con sus servicios a revisar, uno ya revisado y otro no;
+  - un proveedor rechazado y reemplazado;
+  - un servicio cancelado;
+  - una solicitud esperando respuesta, una rechazada y una cancelada.
+
+## Permisos de los endpoints nuevos y modificados
+
+| Ruta | `admin` | `coordinador` | `empleado` |
+| --- | :---: | :---: | :---: |
+| `PUT /eventos/:id` (cambio con motivo) | ✔ | ✔ | — |
+| `POST /eventos/:id/servicios` | ✔ | ✔ | — |
+| `PUT /servicios-evento/:id` | ✔ | ✔ | — |
+| `PUT /servicios-evento/:id/proveedor` | ✔ | ✔ | — |
+| `PATCH /servicios-evento/:id/cancelar` | ✔ | ✔ | — |
+| `PATCH /servicios-evento/:id/estado` | ✔ | ✔ | ✔¹ |
+| `POST /servicios-evento/:id/generar-tareas` | ✔ | ✔ | — |
+| `GET /eventos/:id/cambios` | ✔ | ✔ | — |
+| `GET /eventos/:id/revisiones` | ✔ | ✔ | ✔² |
+| `PATCH /revisiones/:id` | ✔ | ✔ | ✔³ |
+| `GET /eventos/:id/resumen` | ✔ | ✔ | ✔² |
+| `GET /seguimiento/por-estado` | ✔ | ✔ | — |
+
+¹ Solo servicios donde es responsable de alguna tarea (como en la Fase 10).
+² Solo eventos donde tiene alguna tarea. Si no, 404 · `"Evento no encontrado"`.
+³ Solo afectados que son tareas suyas o servicios que gestiona. Si no, 404 · `"Revision no encontrada"`.
+
+Con el evento cerrado (`realizado` o `cancelado`), todos los endpoints de cambio
+responden 409 · `"El evento esta cerrado y no se puede modificar"`, como antes.
+
+---
+
+## Objetos nuevos
+
+### Objeto **Cambio**
+
+```json
+{
+  "id_cambio": 3,
+  "id_evento": 1,
+  "fecha_hora": "2026-10-22T18:40:00.000Z",
+  "tipo": "fecha",
+  "descripcion": "Cambio de fecha del evento",
+  "valor_anterior": "2026-11-15",
+  "valor_nuevo": "2026-11-22",
+  "motivo": "El cliente consiguió el salón recién para el 22",
+  "usuario": { "id_usuario": 2, "nombre": "Martín Ríos" },
+  "servicio": null,
+  "proveedor_anterior": null,
+  "proveedor_nuevo": null,
+  "afectados": 5,
+  "pendientes_revision": 3
+}
+```
+
+- `servicio` es `{ "id_servicio_x_evento", "nombre_servicio" }` cuando el cambio
+  es de un servicio. `proveedor_anterior` y `proveedor_nuevo` son
+  `{ "id_proveedor", "razon_social" }` en los cambios `proveedor_cambiado`.
+- `valor_anterior` y `valor_nuevo` son texto. En `servicio_modificado` es un
+  resumen de los campos, por ejemplo
+  `"cantidad: 180 · importe cliente: 1300000"`.
+- `descripcion` **nunca** incluye importes: es lo que ve el empleado.
+
+### Objeto **Revisión** (un compromiso afectado)
+
+```json
+{
+  "id_afectado": 12,
+  "tipo": "servicio",
+  "id_servicio_x_evento": 2,
+  "nombre_servicio": "Decoración",
+  "id_tarea": null,
+  "descripcion_tarea": null,
+  "responsable": null,
+  "revisado": false,
+  "nota_revision": null,
+  "revisado_por": null,
+  "fecha_revision": null,
+  "cambio": {
+    "id_cambio": 3,
+    "tipo": "fecha",
+    "descripcion": "Cambio de fecha del evento",
+    "motivo": "El cliente consiguió el salón recién para el 22",
+    "fecha_hora": "2026-10-22T18:40:00.000Z"
+  }
+}
+```
+
+- `tipo` es `"servicio"` o `"tarea"`. Para las tareas vienen `id_tarea`,
+  `descripcion_tarea` y `responsable` (`{ "id_empleado", "nombre" }`), y los
+  campos del servicio en `null`.
+- `revisado_por` es `{ "id_usuario", "nombre" }` cuando está revisado.
+
+### Campos nuevos en objetos existentes
+
+- **ServicioEvento** (Fase 6) suma:
+  - `estado_servicio` (`acordado` o `cancelado`);
+  - `a_revisar` (booleano calculado);
+  - `pendientes_revision` (cantidad).
+
+  `estado_proveedor` usa los estados nuevos. Se eliminan `tareas_generadas` y
+  `paso_actual`, que ya no tienen sentido sin secuencia. Se reemplazan por
+  `tipos_generados`: la lista de `id_tipo_tarea` que ya tienen tarea.
+- **Tarea** (Fase 6) suma `a_revisar` y `pendientes_revision`. Se elimina
+  `puede_avanzar`.
+- **Evento (detalle)** (Fase 5) suma `cantidad_asistentes`.
+
+---
+
+## Cambios del evento
+
+### PUT /eventos/:id (cambia)
+
+Ahora es **un cambio registrado**. Body:
+
+```json
+{
+  "fecha_evento_confirmada": "2026-11-22",
+  "sede_acordada": "Estancia El Molino",
+  "condiciones_acordadas": "Seña del 40% pagada.",
+  "cantidad_asistentes": 200,
+  "id_empleado_coordinador": 1,
+  "motivo": "El cliente consiguió el salón recién para el 22",
+  "tareas_afectadas": [7, 9]
+}
+```
+
+- Se compara cada campo con el valor actual, y por **cada uno que cambió** se
+  crea una fila en `cambios_evento`, todas con el mismo `motivo`. El cambio de
+  `id_empleado_coordinador` se guarda sin registrar en el historial: es una
+  decisión interna, no un acuerdo con el cliente.
+- **Afectados:**
+  - si cambió la fecha o la sede, todos los servicios `acordado` del evento
+    quedan a revisar, vinculados al cambio de fecha (o al de sede, si solo
+    cambió la sede);
+  - `tareas_afectadas` (opcional) son las tareas que **el usuario eligió**
+    como afectadas. Se vinculan al primer cambio registrado. Tienen que ser
+    tareas de ese evento.
+- Todo en **una transacción**.
+
+Respuesta 200: **Evento (detalle)**, más `cambios_registrados` (la lista de
+**Cambio** creados en ese pedido).
+
+Errores:
+
+- 400 · `"El motivo del cambio es obligatorio"`
+- 400 · `"No hay cambios para registrar"` (ningún campo cambió, salvo, como
+  mucho, el coordinador)
+- 400 · `"Alguna de las tareas no pertenece a este evento"`
+- más los errores de validación de la Fase 5
+
+### POST /eventos/:id/servicios (nuevo)
+
+Agrega un servicio acordado después de la confirmación.
+
+```json
+{
+  "id_servicio": 5,
+  "id_proveedor": null,
+  "descripcion": "Barra de tragos",
+  "cantidad": 1,
+  "costo_acordado_proveedor": 180000,
+  "importe_acordado_cliente": 250000,
+  "motivo": "El cliente pidió sumar barra de tragos",
+  "tareas_afectadas": []
+}
+```
+
+- Nace con `estado_proveedor = 'pendiente'`, por lo que ya aparece como "sin
+  confirmar": no hace falta marcarlo a revisar.
+- Se registra un cambio `servicio_agregado`.
+- Mismas validaciones de servicio y proveedor que el detalle de presupuesto.
+
+Respuesta 201: **ServicioEvento**.
+
+### PUT /servicios-evento/:id (nuevo)
+
+Modifica lo acordado del servicio: `descripcion`, `cantidad`,
+`costo_acordado_proveedor` e `importe_acordado_cliente`, más `motivo`
+(obligatorio) y `tareas_afectadas` (opcional).
+
+- Se registra un cambio `servicio_modificado`, con el antes y el después.
+- **El servicio queda a revisar.**
+- Si no cambió nada, 400 · `"No hay cambios para registrar"`.
+
+Respuesta 200: **ServicioEvento**.
+
+### PUT /servicios-evento/:id/proveedor (nuevo)
+
+Asigna o reemplaza el proveedor, por ejemplo después de un rechazo.
+
+```json
+{ "id_proveedor": 6, "motivo": "Deco Fiestas rechazó por superposición de fechas", "tareas_afectadas": [11] }
+```
+
+- El proveedor nuevo tiene que ofrecer ese servicio y estar activo.
+- `estado_proveedor` vuelve a `pendiente` y se limpia
+  `fecha_confirmacion_proveedor`.
+- Se registra un cambio `proveedor_cambiado` con el proveedor anterior y el
+  nuevo. Así queda el historial de quién estuvo a cargo.
+- El `motivo` es obligatorio si había un proveedor antes. Si el servicio no
+  tenía proveedor, es opcional y se guarda `"Asignacion inicial"`.
+- `id_proveedor: null` desasigna, con motivo obligatorio.
+
+Respuesta 200: **ServicioEvento**.
+
+- 400 · `"El proveedor no ofrece ese servicio"`
+- 400 · `"El proveedor ya esta asignado a este servicio"`
+
+### PATCH /servicios-evento/:id/cancelar (nuevo)
+
+Quita un servicio del evento **sin borrarlo**.
+
+```json
+{ "motivo": "El cliente decidió no contratar fotografía", "tareas_afectadas": [12, 13] }
+```
+
+- `estado_servicio` pasa a `cancelado` y se registra `servicio_cancelado`.
+- Sus tareas **no** se cancelan ni se borran solas (el sistema no decide): las
+  que el usuario elija quedan a revisar.
+- Un servicio cancelado:
+  - no cuenta en los indicadores ni en "sin confirmar";
+  - se sigue viendo en el evento y en el historial;
+  - no admite más cambios: 409 · `"El servicio esta cancelado"`.
+
+Respuesta 200: **ServicioEvento**.
+
+### PATCH /servicios-evento/:id/estado (reemplaza al PATCH de la Fase 6)
+
+Es el seguimiento normal del proveedor. **No es un cambio del acuerdo**: no
+pide motivo y no va al historial.
+
+```json
+{ "estado_proveedor": "confirmado", "observaciones": "Confirmó por mail" }
+```
+
+- Al pasar a `confirmado` se guarda `fecha_confirmacion_proveedor` = hoy.
+- No se puede pasar a `confirmado` ni a `completado` sin proveedor asignado:
+  409 · `"El servicio no tiene proveedor asignado"`.
+- El `empleado` solo puede usarlo en los servicios que gestiona, igual que en la Fase 10.
+
+Respuesta 200: **ServicioEvento** (sin importes para el empleado).
+
+- 400 · `"Estado de proveedor invalido"`
+
+> **`PATCH /servicios-evento/:id` (Fase 6) se elimina.** Su función se reparte
+> entre `/estado`, `PUT /:id` y `/proveedor`.
+
+### GET /eventos/:id/cambios (nuevo)
+
+Historial completo del evento, del más nuevo al más viejo. Respuesta 200: `[Cambio]`.
+
+Filtro: `?tipo=fecha`.
+
+---
+
+## Revisión de compromisos afectados
+
+### GET /eventos/:id/revisiones (nuevo)
+
+Respuesta 200: `[Revisión]`. Filtro: `?revisado=false` (por defecto trae todas).
+
+- El `empleado` recibe solo las de sus tareas y los servicios que gestiona.
+
+### PATCH /revisiones/:id (nuevo)
+
+Deja constancia de que un compromiso afectado fue revisado.
+
+```json
+{ "nota_revision": "Se avisó a Deco Fiestas, confirma igual para el 22" }
+```
+
+- Guarda `revisado = true`, quién y cuándo.
+- La nota es obligatoria: el cliente pidió "dejar constancia".
+- **No cambia nada más**: si hay que actualizar la tarea o el proveedor, se
+  hace con sus propios endpoints.
+
+Respuesta 200: **Revisión**.
+
+- 400 · `"La nota de revision es obligatoria"`
+- 409 · `"Ya fue revisado"`
+
+---
+
+## Tareas sin secuencia obligatoria
+
+- **Se elimina la regla de secuencia (regla 5).** `PATCH /tareas/:id/estado` ya
+  no responde los 409 de orden, y los pasos se pueden completar en cualquier
+  orden.
+- `tipos_tarea` se mantiene como **guía opcional** de los pasos posibles.
+
+### POST /servicios-evento/:id/generar-tareas (cambia)
+
+Ahora se eligen **qué pasos** crear.
+
+```json
+{
+  "id_empleado_responsable": 3,
+  "pasos": [
+    { "id_tipo_tarea": 1, "fecha_prevista": "2026-10-28" },
+    { "id_tipo_tarea": 2, "fecha_prevista": "2026-11-02" }
+  ]
+}
+```
+
+- Al menos un paso. Se puede llamar otra vez para agregar pasos que falten.
+- Si un paso ya existe para ese servicio, 409 ·
+  `"Ese paso ya tiene una tarea en este servicio"`.
+- Las fechas pueden ir en cualquier orden.
+
+Respuesta 201: `[Tarea]` creadas.
+
+- 400 · `"Hay que indicar el responsable y al menos un paso"`
+
+---
+
+## Resumen del evento · GET /eventos/:id/resumen (nuevo)
+
+Es la consulta 5 del cliente y la vista ampliada del empleado: todo el evento en
+una sola respuesta.
+
+```json
+{
+  "evento": {
+    "id_evento": 1,
+    "estado": "en_preparacion",
+    "nombre_tipo_evento": "Casamiento",
+    "fecha_evento_confirmada": "2026-11-22",
+    "sede_acordada": "Estancia El Molino",
+    "cantidad_asistentes": 200,
+    "condiciones_acordadas": "Seña del 40% pagada.",
+    "coordinador": { "id_empleado": 1, "nombre": "Ana Gómez" }
+  },
+  "cliente": { "nombre": "Lucía Fernández", "telefono": "353-4100001", "email": "lucia@mail.com" },
+  "indicadores": {
+    "tareas_completadas": 5, "tareas_total": 8,
+    "servicios_confirmados": 3, "servicios_total": 4,
+    "tareas_vencidas": 1, "servicios_sin_confirmar": 1, "pendientes_revision": 2,
+    "alerta": true
+  },
+  "servicios": [ "ServicioEvento..." ],
+  "tareas": [ "Tarea..." ],
+  "revisiones_pendientes": [ "Revisión..." ],
+  "ultimos_cambios": [ "Cambio... (los 5 más recientes)" ]
+}
+```
+
+**Definiciones de los indicadores** (las mismas en todo el sistema):
+
+- `servicios_total`: servicios `acordado`. Los cancelados no cuentan.
+- `servicios_confirmados`: `acordado` con proveedor `confirmado` o `completado`.
+- `servicios_sin_confirmar`: `acordado` con proveedor `pendiente` o
+  `rechazado`, o sin proveedor asignado.
+- `tareas_total` y `tareas_completadas`: todas las tareas del evento, libres
+  incluidas.
+- `alerta` = `servicios_sin_confirmar > 0` **o** `pendientes_revision > 0`.
+  Terminar las tareas no apaga la alerta (pedido explícito del cliente).
+
+**Para el `empleado`:**
+
+- `cliente` trae solo el `nombre`;
+- `servicios` va sin `costo_acordado_proveedor` ni `importe_acordado_cliente`;
+- `tareas` trae todas las del evento (también las de otros responsables);
+- `revisiones_pendientes` trae solo las suyas;
+- `ultimos_cambios` va con `descripcion` y `motivo`, sin `valor_anterior` ni
+  `valor_nuevo`.
+
+---
+
+## Seguimiento (cambios)
+
+### GET /seguimiento/proximos-eventos (cambia)
+
+Se elimina `porcentaje_avance` y cada evento suma los indicadores del resumen:
+
+```json
+{
+  "id_evento": 1,
+  "...": "...",
+  "tareas_completadas": 5,
+  "tareas_total": 8,
+  "servicios_confirmados": 3,
+  "servicios_total": 4,
+  "servicios_sin_confirmar": 1,
+  "tareas_vencidas": 1,
+  "pendientes_revision": 2,
+  "alerta": true
+}
+```
+
+### GET /seguimiento/resumen (cambia)
+
+Suma `pendientes_revision`: el total de compromisos a revisar de los eventos
+abiertos.
+
+### GET /seguimiento/servicios-sin-confirmar (cambia)
+
+Usa la definición nueva de "sin confirmar", que incluye `rechazado` y los
+servicios sin proveedor, y excluye los cancelados. Suma `estado_servicio` y
+`a_revisar`.
+
+### GET /seguimiento/por-estado (nuevo)
+
+Es la consulta "eventos por estado" del cliente. Junta en una sola lista las
+**solicitudes** que todavía no son eventos y los **eventos**, cada uno con su
+`situacion`.
+
+Respuesta 200:
+
+```json
+{
+  "conteo": {
+    "esperando_respuesta": 2,
+    "confirmado": 1,
+    "en_preparacion": 3,
+    "realizado": 6,
+    "cancelado": 1,
+    "solicitud_rechazada": 2,
+    "solicitud_cancelada": 1
+  },
+  "items": [
+    {
+      "tipo": "solicitud",
+      "id_solicitud": 4,
+      "id_evento": null,
+      "situacion": "esperando_respuesta",
+      "nombre_cliente": "Grupo Andes SA",
+      "nombre_tipo_evento": "Evento empresarial",
+      "fecha": "2026-12-05",
+      "id_presupuesto_presentado": 9
+    },
+    {
+      "tipo": "evento",
+      "id_solicitud": 2,
+      "id_evento": 1,
+      "situacion": "en_preparacion",
+      "nombre_cliente": "Lucía Fernández",
+      "nombre_tipo_evento": "Casamiento",
+      "fecha": "2026-11-22",
+      "id_presupuesto_presentado": null
+    }
+  ]
+}
+```
+
+| `situacion` | Qué es |
+| --- | --- |
+| `esperando_respuesta` | Solicitud con un presupuesto `presentado`: espera la decisión del cliente |
+| `confirmado`, `en_preparacion`, `realizado`, `cancelado` | Estado del evento |
+| `solicitud_rechazada`, `solicitud_cancelada` | Solicitudes que nunca llegaron a ser evento |
+
+- Las solicitudes `pendiente` (sin presupuesto presentado) no aparecen acá:
+  están en la pantalla de Solicitudes.
+- `fecha` es `fecha_evento_confirmada` en los eventos y `fecha_evento_prevista`
+  en las solicitudes. La lista se ordena por fecha.
+- Filtros: `?situacion=` (una o varias, separadas por coma) y `?desde=&hasta=`.
+- **Nada se borra:** los cancelados y los rechazados siguen apareciendo.
+
+---
+
+## Agregados al implementar la Fase 11
+
+Lo que el contrato no definía y se resolvió así (los dos integrantes lo
+acordaron antes de implementar):
+
+- **`PUT /eventos/:id` con solo el coordinador cambiado:** se guarda, responde
+  200 con `cambios_registrados: []` y no pide motivo. El 400 `"No hay cambios
+  para registrar"` es cuando no cambió nada. El motivo se exige solo si cambió
+  algún campo registrado. Sigue siendo un reemplazo completo (Fase 5), con
+  `cantidad_asistentes` obligatorio: 400 · `"La cantidad de asistentes tiene
+  que ser mayor a 0"`. Si la fecha no cambia, no se exige que sea futura.
+- **`PUT /servicios-evento/:id` es parcial:** se comparan solo los campos que
+  vienen. 400 · `"La cantidad tiene que ser mayor a 0"` y `"Los importes no
+  pueden ser negativos"`. La `descripcion` del cambio dice qué campos
+  cambiaron (`"Cambio en lo acordado de Catering: cantidad, importes"`), sin
+  montos.
+- **`/proveedor`:** sin `id_proveedor` en el body, o quitar cuando no había
+  proveedor → 400 · `"No hay cambios para registrar"`. No marca el servicio a
+  revisar (el proveedor nuevo ya arranca `pendiente`).
+- **`/estado`:** transiciones libres entre los 4 estados. `confirmado` guarda
+  hoy como fecha de confirmación (la conserva si ya estaba confirmado o
+  completado); `completado` la completa si faltaba; `pendiente` y `rechazado`
+  la limpian. Admin y coordinador: los campos de más se ignoran. Empleado:
+  sigue el 403 de la Fase 10.
+- **Servicio cancelado:** también responden 409 · `"El servicio esta
+  cancelado"` `/estado`, `/proveedor` y `generar-tareas`. Sus revisiones
+  abiertas siguen contando en `pendientes_revision` hasta que alguien las
+  revise (cerrarlas solas sería decidir).
+- **`generar-tareas`:** 400 · `"Hay pasos repetidos en el pedido"` y
+  `"Alguno de los pasos no existe"`. Un índice único
+  `(id_servicio_x_evento, id_tipo_tarea)` respalda el 409.
+- **`PATCH /revisiones/:id` con el evento cerrado:** 409 · `"El evento esta
+  cerrado y no se puede modificar"`, como el resto.
+- **`DELETE /tareas/:id` de una tarea con revisiones:** 409 · `"La tarea tiene
+  revisiones registradas y no se puede eliminar"`.
+- **Revisión** suma `id_evento`. **Tarea** suma `pendientes_revision`. El
+  objeto `servicio` de `/tareas/mias` suma `estado_servicio` y `a_revisar`
+  y conserva `pasos` como referencia.
+- **`proximos-eventos`:** `total_tareas` y `porcentaje_avance` se reemplazan
+  por los indicadores (`tareas_total` es el mismo número).
+- **`por-estado`:** `conteo` respeta `desde`/`hasta` pero no `situacion`
+  (los números de las pestañas no cambian al elegir una). Una solicitud con
+  evento aparece una sola vez, como evento. Los filtros inválidos se ignoran.
+- **Empleado y eventos:** `/api/eventos` se monta para los tres roles; el
+  router abre solo `/resumen` y `/revisiones` y cierra el resto con
+  `router.use(permitirRoles("admin", "coordinador"))`. El resumen de un evento
+  cerrado se puede ver.
+
 ## Historial de cambios del contrato
 
 | Fecha | Fase | Cambio | Avisado al front |
@@ -1705,6 +2306,8 @@ datos del evento y del proveedor que el empleado necesita para trabajar,
 | 2026-10-20 | 9 | Revisión final. Errores generales documentados (401, `:id` inválido → 404, `"Hay datos con un formato invalido"`, JSON inválido, `"Ruta no encontrada"`). Todo 500 responde `"Error interno del servidor"` (empresas y auth tenían textos propios). Mensajes exactos de obligatorios de los catálogos. `nombre_cliente` no agrega el `-` de los clientes empresa. Pendientes de la Fase 1 cerrados | ✘ |
 | 2026-10-22 | 10 | Superadmin y roles `admin`, `coordinador` y `empleado` con tabla de permisos. Se eliminan `POST /auth/register` y `/api/empresas`. Nuevos: `/auth/password`, `/superadmin/*`, `/mi-empresa`, `/usuarios` y `POST /empleados/:id/acceso`. Cambian: login (`debe_cambiar_password`, 403 si la empresa está suspendida), `POST /empleados` (bloque `acceso`), `/tareas/mias` (evento y proveedor), y los permisos de `PATCH /tareas/:id/estado` y `PATCH /servicios-evento/:id` para el empleado | ✘ |
 | 2026-10-22 | 10 | **Implementada.** Agregados al contrato: 403 de empresa suspendida con `codigo: "empresa_suspendida"` (también en `/auth/perfil` y `/auth/password`); rol y estado leídos de la base en cada pedido (usuario desactivado → 401); 403 antes que 404; `/tareas/mias` conserva los campos de antes y suma `servicio.pasos`; definición de `puede_avanzar` y de las métricas; `eventos.fecha_creacion`; el superadmin no crea usuarios `empleado`; PATCH de soporte vacío → 400; mensaje del PUT de `/usuarios`; reglas de la baja del empleado y de activar un usuario con el empleado de baja; texto demasiado largo → 400 de formato | ✘ |
+| 2026-10-22 | 11 | Segunda validación con el cliente. Nuevos: historial de cambios (`cambios_evento`) con motivo obligatorio, compromisos a revisar (`afectados_cambio`) y su revisión, alta, cancelación y reemplazo de proveedor en servicios después de confirmar, `/eventos/:id/resumen`, `/seguimiento/por-estado`. Cambian: estados del proveedor (4), `PUT /eventos/:id` pide motivo, `generar-tareas` elige pasos, se elimina la regla de secuencia y `puede_avanzar`, el tablero cambia el porcentaje por dos indicadores y `alerta`, y el `PATCH /servicios-evento/:id` de la Fase 6 se reparte en 3 endpoints. `eventos.cantidad_asistentes` nuevo | ✘ |
+| 2026-10-22 | 11 | **Implementada.** Ver "Agregados al implementar la Fase 11": PUT del evento con solo el coordinador, PUT de servicio parcial, transiciones de `/estado`, 409 de servicio cancelado en todos los cambios, mensajes nuevos de `generar-tareas`, revisiones con el evento cerrado, borrar una tarea con revisiones, `id_evento` en Revisión, campos de `/tareas/mias` y `proximos-eventos`, reglas de `conteo` en `por-estado` y montaje de `/eventos` para el empleado | ✔ |
 
 ### Pendientes del back sobre la Fase 1 ya implementada
 

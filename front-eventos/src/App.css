@@ -11,7 +11,7 @@
 .acceso-enlace { text-align: center; font-size: 13px; color: #666; margin: 20px 0 0; }
 .pantalla-espera { min-height: 60vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; color: #666; }
 .transicion-pagina { animation: entrada-suave 150ms ease-out; }
-.indicadores-seguimiento { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 16px; margin-bottom: 20px; }
+.indicadores-seguimiento { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 16px; margin-bottom: 20px; }
 @media (max-width: 1199px) { .indicadores-seguimiento { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 767px) { .indicadores-seguimiento { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 420px) { .indicadores-seguimiento { grid-template-columns: 1fr; } }

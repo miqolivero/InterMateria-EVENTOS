@@ -1,0 +1,28 @@
+/* Fase 11: cambios del evento, revisiones e indicadores */
+.lista-tareas-afectadas { display: flex; flex-direction: column; gap: 8px; max-height: 240px; overflow-y: auto; }
+
+.indicadores-evento { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 24px; }
+.indicador-evento { display: flex; flex-direction: column; min-width: 110px; }
+.indicador-evento strong { font-size: 20px; font-weight: 600; }
+.indicador-evento span { font-size: 12px; color: #737373; }
+.indicadores-avisos { display: flex; flex-wrap: wrap; gap: 6px; }
+.indicadores-compactos { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.indicadores-compactos .indicadores-avisos { gap: 4px; }
+
+.servicio-cancelado { opacity: 0.55; }
+.servicio-nombre { display: flex; flex-direction: column; gap: 4px; }
+
+.revision-item { border: 1px solid #ffd591; background: #fff7e6; border-radius: 6px; padding: 12px 14px; margin-bottom: 10px; display: flex; flex-direction: column; gap: 4px; }
+.revision-item.revisada { border-color: #e5e5e5; background: #fafafa; }
+.revision-cabecera { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.revision-motivo { font-size: 13px; color: #595959; margin: 0; }
+
+.cambio-item { display: flex; flex-direction: column; gap: 2px; }
+.cambio-valores { font-size: 13px; }
+.cambio-meta { font-size: 12px; color: #737373; }
+
+.pasos-referencia { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+.paso-generar { display: grid; grid-template-columns: minmax(0, 1fr) 170px; gap: 12px; align-items: center; margin-bottom: 12px; }
+@media (max-width: 480px) { .paso-generar { grid-template-columns: 1fr; } }
+.selector-estado { width: 150px; }
+.filtro-segmentado { overflow-x: auto; padding-bottom: 2px; margin-bottom: 16px; }

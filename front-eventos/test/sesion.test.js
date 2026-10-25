@@ -115,5 +115,6 @@ test("fechas, moneda argentina y estados independientes", () => {
   assert.match(formatearMoneda(0), /0,00/);
   assert.equal(formatearMoneda(null), "—");
   assert.equal(estados.completada.texto, "Completada");
-  assert.equal(estados.confirmada.texto, "Confirmada");
+  assert.equal(estados.completado.texto, "Completado");
+  assert.equal(estados.confirmada, undefined);
 });

@@ -3,7 +3,8 @@ import {
   obtenerResumen,
   obtenerProximosEventos,
   obtenerTareasVencidas,
-  obtenerServiciosSinConfirmar
+  obtenerServiciosSinConfirmar,
+  obtenerPorEstado
 } from "../controllers/seguimiento.controller.js";
 
 const router = Router();
@@ -15,5 +16,8 @@ router.get("/resumen", obtenerResumen);
 router.get("/proximos-eventos", obtenerProximosEventos);
 router.get("/tareas-vencidas", obtenerTareasVencidas);
 router.get("/servicios-sin-confirmar", obtenerServiciosSinConfirmar);
+
+// Fase 11: solicitudes y eventos juntos, cada uno con su situacion
+router.get("/por-estado", obtenerPorEstado);
 
 export default router;

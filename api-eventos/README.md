@@ -54,11 +54,11 @@ próximos y tareas vencidas sin tener que editar el script cada semana.
 
 Todos respetan las reglas de negocio, como si se hubieran cargado desde la API:
 los totales coinciden con el detalle, cada evento sale de un presupuesto
-aceptado y ninguna tarea se saltó un paso de la secuencia.
+aceptado y los proveedores de cada renglón ofrecen ese servicio.
 
 | Evento | Empresa | Estado | Cuándo | Para mostrar |
 | --- | --- | --- | --- | --- |
-| 1 · Juan Pérez | 1 | en preparación | en 25 días | tarea vencida, tarea ≠ proveedor (fotografía), un servicio sin tareas para "Generar tareas" |
+| 1 · Juan Pérez | 1 | en preparación | en 25 días | **Fase 11:** cambio de fecha con servicios a revisar (uno revisado y otros no), decoración con el proveedor rechazado y reemplazado, fotografía cancelada con sus tareas a revisar; un servicio sin tareas para "Pasos" |
 | 2 · Grupo Andes SA | 1 | confirmado | en 10 días | tarea vencida, un servicio sin confirmar |
 | 3 · Colegio San José | 1 | realizado | hace 15 días | feedback cargado; la versión 1 del presupuesto fue rechazada |
 | 4 · Martina Ruiz | 1 | cancelado | — | motivo de la cancelación; no aparece en el tablero |
@@ -68,7 +68,8 @@ aceptado y ninguna tarea se saltó un paso de la secuencia.
 Solicitudes en todos los estados: la **4** está `presupuestada`, con un
 presupuesto **presentado** listo para aceptar en vivo; la **1** y la **3** están
 `pendiente` (sin presupuesto); la **8** fue `rechazada`; la **7** se canceló
-junto con su evento.
+junto con su evento; la **11** se canceló antes de presupuestar. En "Eventos por
+estado" se ven la 4 (esperando respuesta), la 8 (rechazada) y la 11 (cancelada).
 
 **Para recrear la base de cero** en cualquier momento alcanza con volver a correr
 los dos scripts, sin el `CREATE DATABASE`.
@@ -294,11 +295,16 @@ rutas piden token.
 | GET | `/:id/servicios` | Lo acordado con cada proveedor | 200 / 404 |
 | PATCH | `/:id/cerrar` | Cerrar como `realizado` o `cancelado` | 200 / 400 / 404 / 409 |
 | PATCH | `/:id/feedback` | Feedback y observaciones de un evento realizado | 200 / 400 / 404 / 409 |
+| POST | `/:id/servicios` | Agregar un servicio después de confirmar (con motivo) | 201 / 400 / 404 / 409 |
+| GET | `/:id/cambios?tipo=` | Historial de cambios del evento | 200 / 404 |
+| GET | `/:id/revisiones?revisado=false` | Compromisos afectados y su revisión (también el empleado) | 200 / 404 |
+| GET | `/:id/resumen` | Todo el evento con sus indicadores (también el empleado, sin importes) | 200 / 404 |
 
 - **Aceptar aplica la regla 4 en una sola transacción:** el presupuesto pasa a
   `aceptado`, las otras versiones abiertas a `reemplazado`, la solicitud a
   `aceptada`, se crea el evento en `confirmado` y cada renglón del detalle se
-  copia a `servicios_x_evento` con estado `solicitada`. Si cualquier paso falla,
+  copia a `servicios_x_evento` con el proveedor `pendiente`. La cantidad de
+  asistentes se copia de la solicitud al evento. Si cualquier paso falla,
   el `ROLLBACK` deshace todo (se probó forzando un error con un trigger).
 - **Una solicitud, un evento:** además del chequeo en el código, el `UNIQUE
   (id_solicitud)` de `eventos` lo garantiza en la base.
@@ -312,8 +318,8 @@ rutas piden token.
   tareas estén completas: el front avisa y decide el usuario.
 - **Feedback.** Es la única edición posible con el evento cerrado, y solo si el
   evento está `realizado`. Es parcial: se actualiza solo lo que viene con texto.
-- En los servicios del evento, `tareas_generadas` y `paso_actual` (el orden de la
-  primera tarea de la secuencia sin completar) se calculan en el SQL.
+- En los servicios del evento, `tipos_generados` (los pasos que ya tienen tarea),
+  `a_revisar` y `pendientes_revision` se calculan en el SQL.
 - Las secuencias de PostgreSQL no vuelven atrás con un `ROLLBACK`: si una
   aceptación falla, ese id de evento queda sin usar. Es normal que haya huecos
   en los ids.
@@ -322,34 +328,52 @@ rutas piden token.
 
 | Método | Ruta | Acción | Respuesta |
 | --- | --- | --- | --- |
-| PATCH | `/api/servicios-evento/:id` | Estado del proveedor, proveedor, importes, observaciones (parcial) | 200 / 400 / 404 / 409 |
-| POST | `/api/servicios-evento/:id/generar-tareas` | Crear los 4 pasos de la secuencia | 201 / 400 / 404 / 409 |
+| PATCH | `/api/servicios-evento/:id/estado` | Seguimiento del proveedor (sin motivo; también el empleado) | 200 / 400 / 403 / 404 / 409 |
+| PUT | `/api/servicios-evento/:id` | Modificar lo acordado (parcial, con motivo) | 200 / 400 / 404 / 409 |
+| PUT | `/api/servicios-evento/:id/proveedor` | Asignar o reemplazar el proveedor (con motivo) | 200 / 400 / 404 / 409 |
+| PATCH | `/api/servicios-evento/:id/cancelar` | Cancelar el servicio sin borrarlo (con motivo) | 200 / 400 / 404 / 409 |
+| POST | `/api/servicios-evento/:id/generar-tareas` | Crear los pasos elegidos | 201 / 400 / 404 / 409 |
+| PATCH | `/api/revisiones/:id` | Marcar un compromiso como revisado, con nota | 200 / 400 / 404 / 409 |
 | GET | `/api/eventos/:id/tareas?estado_tarea=&vencidas=true` | Tareas del evento | 200 / 404 |
 | POST | `/api/eventos/:id/tareas` | Crear una tarea libre | 201 / 400 / 404 / 409 |
 | PUT | `/api/tareas/:id` | Editar descripción, responsable, fecha y observaciones | 200 / 400 / 404 / 409 |
-| PATCH | `/api/tareas/:id/estado` | Cambiar el estado (con la secuencia) | 200 / 400 / 404 / 409 |
+| PATCH | `/api/tareas/:id/estado` | Cambiar el estado (cualquier orden) | 200 / 400 / 404 / 409 |
 | DELETE | `/api/tareas/:id` | Borrar una tarea libre | 204 / 404 / 409 |
 | GET | `/api/tareas/mias?estado_tarea=` | Tareas del empleado del usuario logueado | 200 |
 
-- **Tarea ≠ proveedor (regla 6).** El estado del proveedor solo cambia con el
-  PATCH de servicios-evento; completar "Confirmar asistencia" no lo toca. Al
-  pasar a `confirmada` se guarda la fecha de confirmación.
-- **Secuencia (regla 5).** Las tareas de un servicio siguen el orden de
-  `tipos_tarea`. Un paso no pasa a `en_curso` ni a `completada` si el anterior no
-  está completado, y un paso completado no se reabre si el siguiente ya empezó
-  (409 con el nombre del paso que falta). El cambio de estado va en una
-  transacción que bloquea **todas** las tareas del servicio en el mismo orden,
-  para que dos cambios simultáneos no rompan la secuencia ni se traben entre sí.
+- **Tarea ≠ proveedor (regla 6).** El estado del proveedor solo cambia con
+  `/estado`; completar "Confirmar asistencia" no lo toca. Los 4 estados son
+  `pendiente`, `confirmado`, `completado` y `rechazado`. Al pasar a
+  `confirmado` se guarda la fecha de confirmación; sin proveedor no se puede
+  confirmar ni completar (409).
+- **Sin secuencia (Fase 11).** Los pasos de `tipos_tarea` son una guía: se
+  eligen los que hacen falta y se completan en cualquier orden. Un índice único
+  evita dos tareas del mismo paso en un servicio.
 - **Fecha de finalización (regla 7).** Se guarda al completar y se limpia si la
   tarea vuelve a otro estado.
 - **"Vencida" no se guarda (regla 1).** Se calcula en el SQL:
   `fecha_prevista < CURRENT_DATE` y no completada.
-- **Generar tareas** crea los 4 pasos en un solo `INSERT ... SELECT` sobre
-  `tipos_tarea`, dentro de una transacción: o se crean los 4 o ninguno. La
-  descripción se arma sola (`"<tipo> · <servicio> (<proveedor>)"`).
+- **Generar tareas** crea los pasos elegidos (cada uno con su fecha) en un solo
+  `INSERT ... SELECT` con `unnest`, dentro de una transacción. Se puede volver
+  a llamar para sumar los que falten. La descripción se arma sola
+  (`"<tipo> · <servicio> (<proveedor>)"`).
 - El **responsable** tiene que ser un empleado activo de la empresa (regla 9).
-  Las tareas de la secuencia no se borran; las libres sí.
+  Las tareas de un paso no se borran; las libres sí, salvo que tengan revisiones.
 - Con el evento cerrado, todo cambio en sus servicios o tareas responde 409.
+- **Cambios de lo acordado (Fase 11).** Fecha, sede, condiciones, asistentes y
+  los cambios de un servicio piden `motivo` y quedan en `cambios_evento` (quién,
+  cuándo, antes y después). Los compromisos afectados quedan en
+  `afectados_cambio`: con la fecha o la sede, todos los servicios acordados;
+  con un servicio, ese; las tareas, solo las de `tareas_afectadas`. **El cambio
+  y su registro van en la misma transacción**: si falla el registro, el cambio
+  tampoco queda (se probó con un trigger que hace fallar el INSERT). Nada se
+  reprograma ni se confirma solo.
+- **"A revisar" se calcula** (una fila sin revisar en `afectados_cambio`), igual
+  que "vencida". Revisar guarda quién, cuándo y una nota obligatoria; no cambia
+  nada más.
+- **Un servicio cancelado no se borra:** sigue en el evento y en el historial,
+  no cuenta en los indicadores y no admite más cambios (409). Sus tareas no se
+  tocan.
 - **Mis tareas** busca el `id_empleado` del usuario en la tabla `usuarios`. Si
   no tiene empleado vinculado, devuelve `[]`. Solo muestra eventos abiertos,
   primero las vencidas.
@@ -361,10 +385,11 @@ lectura, siempre sobre los eventos **abiertos** de la empresa.
 
 | Método | Ruta | Devuelve |
 | --- | --- | --- |
-| GET | `/resumen?dias=30` | Cantidades: eventos próximos, tareas vencidas y pendientes, servicios sin confirmar, solicitudes pendientes |
-| GET | `/proximos-eventos?dias=30` | Por evento: días restantes, % de avance, vencidas y servicios sin confirmar |
+| GET | `/resumen?dias=30` | Cantidades: eventos próximos, tareas vencidas y pendientes, servicios sin confirmar, solicitudes pendientes, compromisos a revisar |
+| GET | `/proximos-eventos?dias=30` | Por evento: días restantes, tareas X de Y, servicios confirmados X de Y, vencidas, sin confirmar, a revisar y `alerta` |
 | GET | `/tareas-vencidas` | Las tareas vencidas con los datos del evento y `dias_vencida` |
-| GET | `/servicios-sin-confirmar` | Servicios en `solicitada` o sin proveedor, del evento más cercano al más lejano |
+| GET | `/servicios-sin-confirmar` | Servicios acordados con el proveedor `pendiente` o `rechazado`, o sin proveedor, del evento más cercano al más lejano |
+| GET | `/por-estado?situacion=&desde=&hasta=` | Solicitudes que esperan respuesta y eventos, cada uno con su situación, y el conteo por situación |
 
 - Todo se calcula **en SQL** con `COUNT(*) FILTER (WHERE ...)` y subconsultas,
   sin recorrer filas en JavaScript. En los próximos eventos, tareas y servicios
@@ -373,6 +398,10 @@ lectura, siempre sobre los eventos **abiertos** de la empresa.
 - `?dias` (1 a 365, por defecto 30) solo cambia la ventana de los "próximos".
   Las vencidas y los servicios sin confirmar son de todos los eventos abiertos.
 - "Vencida" usa la misma condición que las tareas (`CONDICION_VENCIDA`, regla 1).
+- **Indicadores (Fase 11):** una sola definición en `src/utils/indicadores.js`
+  (`JOIN_INDICADORES`), la misma para el tablero y el resumen del evento.
+  `alerta` = hay servicios sin confirmar o compromisos a revisar; terminar las
+  tareas no la apaga.
 
 El contrato completo, con el JSON de cada respuesta y los mensajes de error
 exactos, está en `docs/API.md`.
@@ -419,8 +448,10 @@ Los carga `seed.sql`. **La contraseña de todos es `admin123`.** Los marcados co
 La empresa 1 es la que tiene más datos cargados: es la que conviene usar para la
 demo.
 
-**Base ya instalada:** `npm run db:actualizar` aplica los cambios de la Fase 10
-sin borrar datos (los `usuario` pasan a `coordinador`), pero no crea un
+**Base ya instalada:** `npm run db:actualizar` aplica los cambios de las Fases 10
+y 11 sin borrar datos (los `usuario` pasan a `coordinador`, los estados del
+proveedor pasan a los 4 nuevos y la cantidad de asistentes se copia de la
+solicitud al evento), pero no crea un
 superadmin. Para crearlo, generar el hash con
 `node -e "import('bcryptjs').then(b => b.default.hash('tuClave', 10).then(console.log))"`
 y cargarlo con
@@ -464,8 +495,9 @@ api-eventos/
 │   │   ├── solicitudes.controller.js
 │   │   ├── presupuestos.controller.js
 │   │   ├── eventos.controller.js   incluye aceptar (regla 4)
-│   │   ├── serviciosEvento.controller.js  estado del proveedor y generar tareas
-│   │   ├── tareas.controller.js    secuencia, vencida y mis tareas
+│   │   ├── serviciosEvento.controller.js  estado del proveedor, cambios de un servicio y pasos
+│   │   ├── cambios.controller.js   historial, revisiones y resumen del evento
+│   │   ├── tareas.controller.js    estado, vencida y mis tareas
 │   │   └── seguimiento.controller.js  consultas agregadas del tablero
 │   ├── middlewares/
 │   │   ├── auth.middleware.js      verificarToken, soloEmpresa, soloSuperadmin, permitirRoles
@@ -474,7 +506,9 @@ api-eventos/
 │   │   ├── errores.js              traduce los errores de pg a HTTP
 │   │   ├── consultas.js            filtros, chequeo por empresa y empleado activo
 │   │   ├── validaciones.js         formatos de ids, fechas, importes y cantidades
-│   │   └── usuarios.js             reglas de usuarios (último admin, uno mismo, vínculo)
+│   │   ├── usuarios.js             reglas de usuarios (último admin, uno mismo, vínculo)
+│   │   ├── indicadores.js          vencida, a revisar e indicadores: una sola definición
+│   │   └── cambios.js              registrar cambios y afectados dentro de la transacción
 │   └── data/
 │       └── db.js                   pool de pg y parsers de fecha y monto
 └── .env                            no se versiona

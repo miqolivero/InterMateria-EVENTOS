@@ -4,8 +4,23 @@ import { esEmpleadoActivo } from "../utils/consultas.js";
 import {
   esIdValido,
   esFechaValida,
+  esEnteroPositivo,
   esVacio
 } from "../utils/validaciones.js";
+import {
+  SERVICIO_ACORDADO,
+  servicioARevisar,
+  servicioPendientesRevision
+} from "../utils/indicadores.js";
+import {
+  MENSAJES_CAMBIO,
+  tieneTexto,
+  leerTareasAfectadas,
+  sonTareasDelEvento,
+  registrarCambio,
+  marcarAfectados,
+  buscarCambios
+} from "../utils/cambios.js";
 
 // Eventos: nacen al aceptar un presupuesto (regla 4) y desde ahi se coordinan.
 // La tabla eventos SI tiene id_empresa (se guarda la del token al crearlo),
@@ -28,7 +43,8 @@ const MENSAJES = {
   noAceptable: "Solo se puede aceptar un presupuesto presentado",
   yaTieneEvento: "La solicitud ya tiene un evento",
   cerrado: MENSAJE_EVENTO_CERRADO,
-  noIniciable: "Solo se puede iniciar la preparacion de un evento confirmado"
+  noIniciable: "Solo se puede iniciar la preparacion de un evento confirmado",
+  asistentesInvalidos: "La cantidad de asistentes tiene que ser mayor a 0"
 };
 
 const solicitudCerrada = (estado) =>
@@ -43,7 +59,7 @@ const SELECT_EVENTO_LISTADO = `
   SELECT e.id_evento, e.id_solicitud,
          CONCAT_WS(' ', c.nombre, NULLIF(c.apellido, '-')) AS nombre_cliente,
          te.nombre AS nombre_tipo_evento,
-         e.fecha_evento_confirmada, e.sede_acordada, s.cantidad_asistentes,
+         e.fecha_evento_confirmada, e.sede_acordada, e.cantidad_asistentes,
          e.id_empleado_coordinador,
          emp.nombre || ' ' || emp.apellido AS nombre_coordinador,
          e.estado
@@ -59,7 +75,8 @@ const SELECT_EVENTO_LISTADO = `
 // contrato pide coordinador: null.
 const SELECT_EVENTO_DETALLE = `
   SELECT e.id_evento, e.estado, e.fecha_evento_confirmada, e.sede_acordada,
-         e.condiciones_acordadas, e.observaciones_cierre, e.feedback_cliente,
+         e.condiciones_acordadas, e.cantidad_asistentes,
+         e.observaciones_cierre, e.feedback_cliente,
          e.fecha_cierre,
          e.estado IN ('confirmado', 'en_preparacion') AS editable,
          CASE WHEN emp.id_empleado IS NULL THEN NULL
@@ -94,14 +111,13 @@ const SELECT_EVENTO_DETALLE = `
   LEFT JOIN empleados emp ON emp.id_empleado = e.id_empleado_coordinador
   WHERE e.id_evento = $1 AND e.id_empresa = $2`;
 
-// Objeto ServicioEvento (definido en la fase 6 del contrato). Se exporta para
-// que el controlador de servicios del evento devuelva exactamente lo mismo.
+// Objeto ServicioEvento (definido en la fase 6 del contrato, ampliado en la
+// 11). Se exporta para que el controlador de servicios del evento devuelva
+// exactamente lo mismo.
 //
-// - tareas_generadas: existe alguna tarea de la secuencia (con tipo) para el
-//   servicio. Las 4 se generan juntas, asi que alcanza con que exista una.
-// - paso_actual: el orden mas chico entre las tareas de la secuencia que no
-//   estan completadas. MIN sobre ninguna fila da NULL, que es justo lo que
-//   pide el contrato cuando no hay tareas o estan todas completas.
+// - tipos_generados: los pasos (id_tipo_tarea) que ya tienen tarea. Reemplaza
+//   a tareas_generadas y paso_actual, que sin secuencia no tienen sentido.
+// - a_revisar y pendientes_revision: calculados, como "vencida".
 export const SELECT_SERVICIO_EVENTO = `
   SELECT sxe.id_servicio_x_evento, sxe.id_evento, sxe.id_servicio,
          sv.nombre AS nombre_servicio,
@@ -109,13 +125,13 @@ export const SELECT_SERVICIO_EVENTO = `
          sxe.descripcion, sxe.cantidad, sxe.costo_acordado_proveedor,
          sxe.importe_acordado_cliente, sxe.estado_proveedor,
          sxe.fecha_confirmacion_proveedor, sxe.observaciones,
-         EXISTS (SELECT 1 FROM tareas t
-                 WHERE t.id_servicio_x_evento = sxe.id_servicio_x_evento
-                   AND t.id_tipo_tarea IS NOT NULL) AS tareas_generadas,
-         (SELECT MIN(tt.orden) FROM tareas t
-          JOIN tipos_tarea tt ON tt.id_tipo_tarea = t.id_tipo_tarea
-          WHERE t.id_servicio_x_evento = sxe.id_servicio_x_evento
-            AND t.estado_tarea <> 'completada') AS paso_actual
+         sxe.estado_servicio,
+         ${servicioARevisar("sxe")} AS a_revisar,
+         ${servicioPendientesRevision("sxe")} AS pendientes_revision,
+         ARRAY(SELECT t.id_tipo_tarea FROM tareas t
+               JOIN tipos_tarea tt ON tt.id_tipo_tarea = t.id_tipo_tarea
+               WHERE t.id_servicio_x_evento = sxe.id_servicio_x_evento
+               ORDER BY tt.orden) AS tipos_generados
   FROM servicios_x_evento sxe
   JOIN servicios sv ON sv.id_servicio = sxe.id_servicio
   LEFT JOIN proveedores pr ON pr.id_proveedor = sxe.id_proveedor`;
@@ -139,7 +155,9 @@ const estadoEvento = async (idEvento, idEmpresa) => {
 // Validaciones del body de aceptar y del PUT que no dependen de la empresa.
 // La fecha mal escrita cuenta como fecha faltante (mismo criterio que en
 // solicitudes). Un coordinador con formato invalido no puede ser un empleado.
-const validarDatosEvento = async (body) => {
+// fechaActual (PUT): si la fecha no cambia, no se exige que sea futura. Asi
+// se puede corregir la sede de un evento cuya fecha ya paso.
+const validarDatosEvento = async (body, fechaActual = null) => {
   const { fecha_evento_confirmada, id_empleado_coordinador } = body;
 
   if (!esFechaValida(fecha_evento_confirmada)) {
@@ -150,7 +168,7 @@ const validarDatosEvento = async (body) => {
   const { rows } = await pool.query("SELECT $1::date < CURRENT_DATE AS pasada", [
     fecha_evento_confirmada
   ]);
-  if (rows[0].pasada) {
+  if (rows[0].pasada && fecha_evento_confirmada !== fechaActual) {
     return MENSAJES.fechaPasada;
   }
 
@@ -176,8 +194,8 @@ const coordinadorValido = async (ejecutor, idCoordinador, idEmpresa) =>
 //   1. el presupuesto pasa a 'aceptado';
 //   2. las otras versiones abiertas de la solicitud pasan a 'reemplazado';
 //   3. la solicitud pasa a 'aceptada';
-//   4. se crea el evento ('confirmado');
-//   5. el detalle se copia a servicios_x_evento ('solicitada').
+//   4. se crea el evento ('confirmado'), con los asistentes de la solicitud;
+//   5. el detalle se copia a servicios_x_evento (proveedor 'pendiente').
 // Si cualquiera falla, el ROLLBACK deshace los anteriores: no puede quedar un
 // presupuesto aceptado sin evento, ni un evento sin sus servicios.
 export const aceptarPresupuesto = async (req, res) => {
@@ -268,11 +286,15 @@ export const aceptarPresupuesto = async (req, res) => {
     );
 
     // 4. El evento. id_empresa sale del token; estado ('confirmado') del DEFAULT.
+    //    La cantidad de asistentes se copia de la solicitud: desde aca vive en
+    //    el evento y sus cambios quedan en el historial (Fase 11).
     const evento = await client.query(
       `INSERT INTO eventos (id_empresa, id_solicitud, id_presupuesto_aceptado,
                             id_empleado_coordinador, fecha_evento_confirmada,
-                            sede_acordada, condiciones_acordadas)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+                            sede_acordada, condiciones_acordadas,
+                            cantidad_asistentes)
+       VALUES ($1, $2, $3, $4, $5, $6, $7,
+               (SELECT cantidad_asistentes FROM solicitudes WHERE id_solicitud = $2))
        RETURNING id_evento`,
       [
         idEmpresa,
@@ -288,7 +310,7 @@ export const aceptarPresupuesto = async (req, res) => {
     const idEvento = evento.rows[0].id_evento;
 
     // 5. Lo presupuestado pasa a ser lo ACORDADO. Desde aca cada servicio
-    //    tiene su propio estado de proveedor ('solicitada' por DEFAULT).
+    //    tiene su propio estado de proveedor ('pendiente' por DEFAULT).
     await client.query(
       `INSERT INTO servicios_x_evento (id_evento, id_servicio, id_proveedor,
                                        descripcion, cantidad,
@@ -373,65 +395,162 @@ export const obtenerEventoPorId = async (req, res) => {
 };
 
 // PUT /api/eventos/:id
-// Fecha, sede, condiciones y coordinador, solo con el evento abierto.
+// Fase 11: es un CAMBIO REGISTRADO. Reemplaza el objeto completo (como en la
+// Fase 5) y compara cada campo con lo guardado: por cada uno que cambio se
+// crea una fila en cambios_evento, todas con el mismo motivo.
+//
+// El coordinador se guarda sin historial: es una decision interna, no un
+// acuerdo con el cliente. Si solo cambio el coordinador, se guarda sin pedir
+// motivo y cambios_registrados queda vacio.
+//
+// Afectados: si cambio la fecha o la sede, todos los servicios acordados
+// quedan a revisar (vinculados al cambio de fecha, o al de sede si solo cambio
+// la sede). Las tareas las elige el usuario (tareas_afectadas): el sistema no
+// adivina cuales se corren con la fecha, ni las reprograma solo.
+//
+// Todo en UNA transaccion: el UPDATE del evento, los registros y los afectados.
+// Si falla cualquier INSERT del historial, el ROLLBACK deshace el cambio del
+// evento: no puede quedar una fecha cambiada sin su registro.
+const CAMPOS_REGISTRADOS = [
+  { campo: "fecha_evento_confirmada", tipo: "fecha", descripcion: "Cambio de fecha del evento" },
+  { campo: "sede_acordada", tipo: "sede", descripcion: "Cambio de sede del evento" },
+  { campo: "condiciones_acordadas", tipo: "condiciones", descripcion: "Cambio de las condiciones acordadas" },
+  { campo: "cantidad_asistentes", tipo: "cantidad_asistentes", descripcion: "Cambio de la cantidad de asistentes" }
+];
+
+// Un texto opcional vacio se guarda como null, asi "" y null no cuentan
+// como un cambio
+const textoONull = (valor) => (tieneTexto(valor) ? valor.trim() : null);
+
 export const editarEvento = async (req, res) => {
   const idEmpresa = req.usuario.id_empresa;
-  const {
-    fecha_evento_confirmada,
-    sede_acordada,
-    condiciones_acordadas,
-    id_empleado_coordinador
-  } = req.body;
+  const body = req.body ?? {};
+
+  if (!esFechaValida(body.fecha_evento_confirmada)) {
+    return res.status(400).json({ mensaje: MENSAJES.fechaObligatoria });
+  }
+  if (!esEnteroPositivo(body.cantidad_asistentes)) {
+    return res.status(400).json({ mensaje: MENSAJES.asistentesInvalidos });
+  }
+  const tareasAfectadas = leerTareasAfectadas(body.tareas_afectadas);
+  if (!tareasAfectadas) {
+    return res.status(400).json({ mensaje: MENSAJES_CAMBIO.tareasAjenas });
+  }
+
+  const nuevo = {
+    fecha_evento_confirmada: body.fecha_evento_confirmada,
+    sede_acordada: textoONull(body.sede_acordada),
+    condiciones_acordadas: textoONull(body.condiciones_acordadas),
+    cantidad_asistentes: Number(body.cantidad_asistentes),
+    id_empleado_coordinador: esVacio(body.id_empleado_coordinador)
+      ? null
+      : Number(body.id_empleado_coordinador)
+  };
+
+  const client = await pool.connect();
+  const responder = async (status, mensaje) => {
+    await client.query("ROLLBACK");
+    return res.status(status).json({ mensaje });
+  };
 
   try {
-    const errorDatos = await validarDatosEvento(req.body);
-    if (errorDatos) {
-      return res.status(400).json({ mensaje: errorDatos });
+    await client.query("BEGIN");
+
+    // Bloqueado hasta el COMMIT: dos cambios a la vez quedan en fila y el
+    // segundo compara contra lo que dejo el primero
+    const actual = await client.query(
+      `SELECT estado, fecha_evento_confirmada, sede_acordada, condiciones_acordadas,
+              cantidad_asistentes, id_empleado_coordinador
+       FROM eventos WHERE id_evento = $1 AND id_empresa = $2
+       FOR UPDATE`,
+      [req.params.id, idEmpresa]
+    );
+    const evento = actual.rows[0];
+
+    if (!evento) return responder(404, MENSAJES.noEncontrado);
+    if (!ESTADOS_ABIERTOS.includes(evento.estado)) return responder(409, MENSAJES.cerrado);
+
+    const errorDatos = await validarDatosEvento(body, evento.fecha_evento_confirmada);
+    if (errorDatos) return responder(400, errorDatos);
+
+    const cambiados = CAMPOS_REGISTRADOS.filter(({ campo }) => nuevo[campo] !== evento[campo]);
+    const cambioCoordinador = nuevo.id_empleado_coordinador !== evento.id_empleado_coordinador;
+
+    if (cambiados.length === 0 && !cambioCoordinador) {
+      return responder(400, MENSAJES_CAMBIO.sinCambios);
+    }
+    if (cambiados.length > 0 && !tieneTexto(body.motivo)) {
+      return responder(400, MENSAJES_CAMBIO.motivoObligatorio);
+    }
+    if (cambioCoordinador && !(await coordinadorValido(client, nuevo.id_empleado_coordinador, idEmpresa))) {
+      return responder(400, MENSAJES.coordinadorInvalido);
+    }
+    if (cambiados.length > 0 && !(await sonTareasDelEvento(client, req.params.id, tareasAfectadas))) {
+      return responder(400, MENSAJES_CAMBIO.tareasAjenas);
     }
 
-    // Primero 404 y 409, despues el coordinador (que necesita la base), con
-    // el mismo orden de errores que en presupuestos.
-    const estado = await estadoEvento(req.params.id, idEmpresa);
-    if (!estado) {
-      return res.status(404).json({ mensaje: MENSAJES.noEncontrado });
-    }
-    if (!ESTADOS_ABIERTOS.includes(estado)) {
-      return res.status(409).json({ mensaje: MENSAJES.cerrado });
-    }
-
-    if (!(await coordinadorValido(pool, id_empleado_coordinador, idEmpresa))) {
-      return res.status(400).json({ mensaje: MENSAJES.coordinadorInvalido });
-    }
-
-    // El estado se vuelve a exigir en el WHERE: si alguien cerro el evento
-    // entre el chequeo de arriba y este UPDATE, no se modifica.
-    const resultado = await pool.query(
+    await client.query(
       `UPDATE eventos
-       SET fecha_evento_confirmada = $1,
-           sede_acordada = $2,
-           condiciones_acordadas = $3,
-           id_empleado_coordinador = $4
-       WHERE id_evento = $5 AND id_empresa = $6
-         AND estado = ANY($7)
-       RETURNING id_evento`,
+       SET fecha_evento_confirmada = $1, sede_acordada = $2,
+           condiciones_acordadas = $3, cantidad_asistentes = $4,
+           id_empleado_coordinador = $5
+       WHERE id_evento = $6`,
       [
-        fecha_evento_confirmada,
-        sede_acordada ?? null,
-        condiciones_acordadas ?? null,
-        esVacio(id_empleado_coordinador) ? null : id_empleado_coordinador,
-        req.params.id,
-        idEmpresa,
-        ESTADOS_ABIERTOS
+        nuevo.fecha_evento_confirmada,
+        nuevo.sede_acordada,
+        nuevo.condiciones_acordadas,
+        nuevo.cantidad_asistentes,
+        nuevo.id_empleado_coordinador,
+        req.params.id
       ]
     );
 
-    if (resultado.rows.length === 0) {
-      return res.status(409).json({ mensaje: MENSAJES.cerrado });
+    // Un registro por campo cambiado, en el orden de CAMPOS_REGISTRADOS
+    const ids = {};
+    for (const { campo, tipo, descripcion } of cambiados) {
+      ids[tipo] = await registrarCambio(client, {
+        idEvento: req.params.id,
+        idUsuario: req.usuario.id,
+        tipo,
+        descripcion,
+        valorAnterior: evento[campo] === null ? null : String(evento[campo]),
+        valorNuevo: nuevo[campo] === null ? null : String(nuevo[campo]),
+        motivo: body.motivo
+      });
     }
 
-    res.json(await buscarEvento(pool, req.params.id, idEmpresa));
+    // La fecha o la sede afectan a todos los proveedores acordados
+    const cambioDeLugar = ids.fecha ?? ids.sede;
+    if (cambioDeLugar) {
+      const servicios = await client.query(
+        `SELECT sxe.id_servicio_x_evento FROM servicios_x_evento sxe
+         WHERE sxe.id_evento = $1 AND ${SERVICIO_ACORDADO}
+         ORDER BY sxe.id_servicio_x_evento`,
+        [req.params.id]
+      );
+      await marcarAfectados(client, cambioDeLugar, {
+        servicios: servicios.rows.map((fila) => fila.id_servicio_x_evento)
+      });
+    }
+
+    // Las tareas elegidas, al primer cambio registrado
+    const idsCambios = Object.values(ids);
+    if (idsCambios.length > 0) {
+      await marcarAfectados(client, idsCambios[0], { tareas: tareasAfectadas });
+    }
+
+    const respuesta = {
+      ...(await buscarEvento(client, req.params.id, idEmpresa)),
+      cambios_registrados: await buscarCambios(client, idsCambios)
+    };
+
+    await client.query("COMMIT");
+    res.json(respuesta);
   } catch (error) {
+    await client.query("ROLLBACK");
     responderError(res, error);
+  } finally {
+    client.release();
   }
 };
 
@@ -500,8 +619,8 @@ const MENSAJES_CIERRE = {
 
 const ESTADOS_CIERRE = ["realizado", "cancelado"];
 
-// Texto con contenido: un motivo hecho solo de espacios no es un motivo
-const tieneTexto = (valor) => typeof valor === "string" && valor.trim() !== "";
+// tieneTexto (un texto hecho solo de espacios cuenta como vacio) viene de
+// utils/cambios.js: es el mismo criterio que el motivo de un cambio.
 
 // PATCH /api/eventos/:id/cerrar
 // Cierra el evento como realizado o cancelado. Si se cancela, la solicitud

@@ -16,6 +16,7 @@ import eventosRoutes from "./routes/eventos.routes.js";
 import serviciosEventoRoutes from "./routes/serviciosEvento.routes.js";
 import tareasRoutes from "./routes/tareas.routes.js";
 import seguimientoRoutes from "./routes/seguimiento.routes.js";
+import revisionesRoutes from "./routes/revisiones.routes.js";
 import {
   verificarToken,
   soloEmpresa,
@@ -66,14 +67,19 @@ app.use("/api/empleados", ...operacion, empleadosRoutes);
 // /api/solicitudes/:id/presupuestos y el evento en /api/presupuestos/:id/aceptar.
 app.use("/api/solicitudes", ...operacion, solicitudesRoutes);
 app.use("/api/presupuestos", ...operacion, presupuestosRoutes);
-app.use("/api/eventos", ...operacion, eventosRoutes);
 app.use("/api/seguimiento", ...operacion, seguimientoRoutes);
 
-// Las dos unicas rutas de operacion que usa el empleado. El router le cierra el
-// resto (generar tareas, editar y borrar tareas) y el controller lo limita a
-// SUS registros.
+// Las rutas de operacion que tambien usa el empleado. Cada router le cierra
+// el resto (con router.use(permitirRoles(...)) o por endpoint) y el
+// controller lo limita a SUS registros:
+//   - eventos: solo el resumen y las revisiones (Fase 11);
+//   - servicios-evento: solo el estado del proveedor;
+//   - tareas: "mis tareas" y el cambio de estado;
+//   - revisiones: dejar constancia de lo que reviso.
+app.use("/api/eventos", ...empresa, permitirRoles(ADMIN, COORDINADOR, EMPLEADO), eventosRoutes);
 app.use("/api/servicios-evento", ...empresa, permitirRoles(ADMIN, COORDINADOR, EMPLEADO), serviciosEventoRoutes);
 app.use("/api/tareas", ...empresa, permitirRoles(ADMIN, COORDINADOR, EMPLEADO), tareasRoutes);
+app.use("/api/revisiones", ...empresa, permitirRoles(ADMIN, COORDINADOR, EMPLEADO), revisionesRoutes);
 
 // Ruta 404: siempre al final
 app.use((req, res) => {

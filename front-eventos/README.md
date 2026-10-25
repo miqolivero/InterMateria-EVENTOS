@@ -24,7 +24,7 @@ Abrir `http://localhost:5173`. El puerto es fijo para coincidir con el CORS de l
 API. Preparar PostgreSQL e iniciar la API según la guía antes de usar el
 frontend real. Compilar la interfaz no crea tablas ni usuarios.
 
-## Pantallas por rol (Fase 10)
+## Pantallas por rol (Fases 10 y 11)
 
 Según `usuario.rol` del login hay tres layouts. El menú y las guardas de las
 rutas salen de una sola definición, `src/utils/menu.jsx`: si un rol entra a una
@@ -36,7 +36,7 @@ permisos los aplica la API.
 | `superadmin` | `LayoutSuperadmin` | `/superadmin` | Resumen (métricas), Empresas (`/superadmin/empresas`: tabla con métricas, búsqueda, filtro, suspender y alta en dos pasos) y detalle (`/superadmin/empresas/:id`: datos, métricas y soporte de usuarios) |
 | `admin` | `LayoutPrincipal` | `/seguimiento` | Toda la operación, más Personal (con acceso), Usuarios y Mi empresa editable |
 | `coordinador` | `LayoutPrincipal` | `/seguimiento` | Toda la operación y Mi empresa en solo lectura |
-| `empleado` | `LayoutEmpleado` | `/mis-tareas` | Mis tareas (su panel para el celular) y Mi empresa en solo lectura |
+| `empleado` | `LayoutEmpleado` | `/mis-tareas` | Mis tareas (su panel para el celular), Mis eventos (el contexto completo, sin importes) y Mi empresa en solo lectura |
 
 | Ruta | Funcionalidad |
 | --- | --- |
@@ -49,9 +49,11 @@ permisos los aplica la API.
 | `/mi-empresa` | Datos de la empresa; el admin los edita, el CUIT queda en solo lectura |
 | `/solicitudes`, `/solicitudes/:id` | Listado, nueva solicitud, datos, presupuestos y acciones según estado |
 | `/presupuestos/:id` | Cabecera, detalle, totales, versiones, presentación, rechazo y aceptación |
-| `/eventos`, `/eventos/:id` | Listado con calendario; resumen, servicios, tareas, cierre y feedback |
-| `/mis-tareas` | Admin y coordinador: tabla de sus tareas. Empleado: tarjetas por evento, vencidas arriba, filtro, pasos de la secuencia, avanzar estado y gestión del proveedor (sin importes) |
-| `/seguimiento` | Indicadores, próximos eventos, vencidas y servicios sin confirmar |
+| `/eventos`, `/eventos/:id` | Listado con calendario; resumen con indicadores, servicios, tareas, "A revisar", historial, cierre y feedback. "Cambiar lo acordado" pide motivo |
+| `/eventos-por-estado` | (admin y coordinador) Solicitudes que esperan respuesta y eventos, con una pestaña por situación y el conteo; rechazadas y canceladas siguen a la vista |
+| `/mis-tareas` | Admin y coordinador: tabla de sus tareas. Empleado: tarjetas por evento, vencidas arriba, filtro, pasos como referencia, "A revisar", avanzar estado y gestión del proveedor (sin importes) |
+| `/mis-eventos`, `/mis-eventos/:id` | (empleado) Los eventos donde tiene tareas y su resumen: indicadores, lo que tiene que revisar, servicios sin importes, las tareas de todo el equipo y los últimos cambios |
+| `/seguimiento` | Indicadores (con "A revisar"), próximos eventos con tareas X de Y, servicios X de Y y alerta, vencidas y servicios sin confirmar |
 | Otras rutas | Con sesión muestra la página 404; sin sesión redirige al login |
 
 Si la API responde 403 con `codigo: "empresa_suspendida"`, el front cierra la
@@ -78,16 +80,24 @@ con el `mensaje` de la API, sin cerrar nada.
   solicitudes cerradas. Aceptar permite un coordinador opcional y navega al evento.
 - Proveedores filtrados por el servicio que ofrecen; no se asignan proveedores
   inactivos. El estado del proveedor no se deduce del estado de las tareas.
-- Cuatro tareas por servicio, con responsable y fechas ordenadas. Se permite que
-  dos pasos tengan la misma fecha. Las tareas internas pueden no tener servicio.
-- La interfaz bloquea adelantar pasos y reabrir uno completado si el siguiente
-  comenzó. La API sigue validando cada operación y sus posibles conflictos.
-- En Mis tareas se carga la secuencia completa del evento antes de cambiar un
-  estado, porque los pasos anteriores pueden estar asignados a otra persona.
+- **Fase 11, sin secuencia:** en "Pasos" se eligen los pasos que hacen falta,
+  cada uno con su fecha y en cualquier orden; solo se ofrecen los que todavía no
+  tienen tarea. Cualquier tarea pasa a cualquier estado. Los pasos se muestran
+  como referencia, sin bloquear nada. Las tareas internas pueden no tener servicio.
+- **Cambios de lo acordado con motivo:** cambiar fecha, sede, asistentes o
+  condiciones, agregar, modificar o cancelar un servicio y cambiar el proveedor
+  usan el mismo `ModalCambio`: motivo obligatorio y una lista para tildar las
+  tareas afectadas. El estado del proveedor es seguimiento y se cambia sin
+  motivo. Cambiar solo el coordinador no pide motivo.
+- **A revisar:** etiqueta naranja en servicios y tareas, pestaña con contador en
+  el evento, tarjeta en el tablero y en el panel del empleado. "Marcar como
+  revisado" pide una nota y no cambia nada más.
+- Un servicio cancelado se ve en gris y sin acciones; no se borra.
 - Un evento cerrado muestra servicios y tareas en solo lectura. Solo un evento
   realizado permite actualizar feedback y observaciones. Cancelar exige motivo
   y el cierre requiere confirmación explícita.
-- Vencidas, porcentajes y totales se muestran según los datos del backend. El
+- Vencidas, indicadores, alerta y totales se muestran según los datos del backend
+  (no se recalculan en el front). El
   cierre avisa si hay pendientes, pero el usuario decide si cierra el evento.
 - Fechas DD/MM/YYYY, moneda ARS y estados con etiquetas compartidas. Las
   animaciones respetan `prefers-reduced-motion`.
@@ -101,7 +111,8 @@ npm test
 ```
 
 Las pruebas verifican permisos, sesión, concurrencia entre sesiones, rutas y
-payloads del contrato, formatos, campos permitidos y secuencia de tareas. No
+payloads del contrato (incluidos los cambios con motivo y las revisiones de la
+Fase 11), formatos y campos permitidos. No
 escriben en PostgreSQL ni llaman a la API real.
 
 Para revisar las pantallas sin depender de los datos o disponibilidad del backend:
@@ -134,7 +145,7 @@ src/
   servicios/                Una instancia axios y operaciones del contrato
   utils/                    Formatos, campos permitidos, estados y reglas de interfaz
 test/
-  contrato.test.js          Rutas, payloads y secuencia de tareas
+  contrato.test.js          Rutas y payloads del contrato
   sesion.test.js            Token, sesión, errores y formatos
   permisos.test.js          Control de acceso con los componentes reales
   vista-contrato.mjs        Vista manual aislada, ficticia y sin escrituras

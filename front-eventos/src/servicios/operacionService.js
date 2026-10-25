@@ -20,7 +20,13 @@ export const obtenerEvento = (id) => api.get(`/eventos/${id}`);
 export const editarEvento = (id, datos) => api.put(`/eventos/${id}`, datos);
 export const iniciarPreparacion = (id) => api.patch(`/eventos/${id}/iniciar-preparacion`);
 export const serviciosEvento = (id) => api.get(`/eventos/${id}/servicios`);
-export const editarServicioEvento = (id, datos) => api.patch(`/servicios-evento/${id}`, datos);
+// Fase 11: el PATCH /servicios-evento/:id se reparte en el seguimiento (sin
+// motivo) y en los cambios de lo acordado (con motivo y tareas afectadas)
+export const estadoProveedor = (id, datos) => api.patch(`/servicios-evento/${id}/estado`, datos);
+export const modificarServicio = (id, datos) => api.put(`/servicios-evento/${id}`, datos);
+export const cambiarProveedor = (id, datos) => api.put(`/servicios-evento/${id}/proveedor`, datos);
+export const cancelarServicio = (id, datos) => api.patch(`/servicios-evento/${id}/cancelar`, datos);
+export const agregarServicio = (id, datos) => api.post(`/eventos/${id}/servicios`, datos);
 export const generarTareas = (id, datos) => api.post(`/servicios-evento/${id}/generar-tareas`, datos);
 export const tareasEvento = (id, params) => api.get(`/eventos/${id}/tareas`, { params });
 export const crearTarea = (id, datos) => api.post(`/eventos/${id}/tareas`, datos);
@@ -34,3 +40,8 @@ export const resumenSeguimiento = (dias) => api.get("/seguimiento/resumen", { pa
 export const proximosEventos = (dias) => api.get("/seguimiento/proximos-eventos", { params: { dias } });
 export const tareasVencidas = (dias) => api.get("/seguimiento/tareas-vencidas", { params: { dias } });
 export const serviciosSinConfirmar = (dias) => api.get("/seguimiento/servicios-sin-confirmar", { params: { dias } });
+export const resumenEvento = (id) => api.get(`/eventos/${id}/resumen`);
+export const cambiosEvento = (id, params) => api.get(`/eventos/${id}/cambios`, { params });
+export const revisionesEvento = (id, params) => api.get(`/eventos/${id}/revisiones`, { params });
+export const marcarRevisado = (id, nota_revision) => api.patch(`/revisiones/${id}`, { nota_revision });
+export const eventosPorEstado = (params) => api.get("/seguimiento/por-estado", { params });

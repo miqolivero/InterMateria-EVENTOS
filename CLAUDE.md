@@ -59,10 +59,9 @@ Somos dos personas: una a cargo del **backend** y otra del **frontend**.
   rompe las pantallas.
 - **Archivos compartidos** (`CLAUDE.md` de la raíz, `ROADMAP.md`, el DER): se
   cambian solo si están de acuerdo los dos.
-- **Ramas**: una por persona, `backend` y `frontend`, donde se suben todos los
-  avances. Al terminar cada fase (los dos lados probados juntos) se mergea a
-  `main` con Pull Request, y el otro integrante lo revisa. Lo del otro se trae
-  desde `main` (`git merge origin/main`).
+- **Ramas**: desde la Fase 10 se trabaja directo en `main`. Antes de empezar,
+  `git pull origin main`. Al terminar una fase se hace un commit por fase, y
+  el otro integrante revisa los cambios antes de seguir con la siguiente.
 
 ## Modelo de datos
 
@@ -86,9 +85,11 @@ solo los campos clave.
 | `solicitudes` | Pedido inicial del cliente | `id_cliente`, `id_tipo_evento`, `fecha_evento_prevista`, `cantidad_asistentes`, `sede_prevista`, `preferencias`, `estado` |
 | `presupuestos` | Versiones de la propuesta | `id_solicitud`, `numero_version`, `importe_total`, `estado` · UNIQUE (`id_solicitud`, `numero_version`) |
 | `detalle_presupuesto` | Renglones de la propuesta | `id_servicio`, `id_proveedor` NULL, `costo_proveedor`, `importe_cliente` |
-| `eventos` | Se crea al aceptar un presupuesto | `id_solicitud` UNIQUE, `id_presupuesto_aceptado` UNIQUE, `id_empleado_coordinador`, `fecha_evento_confirmada`, `sede_acordada`, `condiciones_acordadas`, `estado`, `observaciones_cierre`, `feedback_cliente` |
-| `servicios_x_evento` | Lo **acordado** y el estado de cada proveedor | `id_servicio`, `id_proveedor` NULL, `costo_acordado_proveedor`, `importe_acordado_cliente`, `estado_proveedor`, `fecha_confirmacion_proveedor` |
-| `tipos_tarea` | Los 4 pasos secuenciales con un proveedor | `nombre`, `orden` UNIQUE. Fija del sistema, se carga en el seed |
+| `eventos` | Se crea al aceptar un presupuesto | `id_solicitud` UNIQUE, `id_presupuesto_aceptado` UNIQUE, `id_empleado_coordinador`, `fecha_evento_confirmada`, `sede_acordada`, `cantidad_asistentes`, `condiciones_acordadas`, `estado`, `observaciones_cierre`, `feedback_cliente` |
+| `servicios_x_evento` | Lo **acordado** y el estado de cada proveedor | `id_servicio`, `id_proveedor` NULL, `costo_acordado_proveedor`, `importe_acordado_cliente`, `estado_proveedor`, `estado_servicio` (`acordado`/`cancelado`), `fecha_confirmacion_proveedor` |
+| `cambios_evento` | Historial de cambios después de confirmar | `id_evento`, `id_usuario`, `fecha_hora`, `tipo`, `descripcion`, `valor_anterior`, `valor_nuevo`, `motivo` NOT NULL, proveedor anterior y nuevo |
+| `afectados_cambio` | Compromisos (servicio o tarea) afectados por un cambio y su revisión | `id_cambio`, `id_servicio_x_evento` o `id_tarea`, `revisado`, quién, cuándo, `nota_revision` |
+| `tipos_tarea` | Guía de los 4 pasos posibles con un proveedor (**opcionales y sin orden obligatorio**) | `nombre`, `orden` UNIQUE (solo para mostrar). Fija del sistema |
 | `tareas` | Trabajo del personal | `id_evento`, `id_empleado_responsable`, `id_servicio_x_evento` NULL, `id_tipo_tarea` NULL, `descripcion`, `fecha_prevista`, `fecha_finalizacion`, `estado_tarea` |
 
 Estados válidos:
@@ -96,7 +97,8 @@ Estados válidos:
 - `solicitudes.estado`: `pendiente` → `presupuestada` → `aceptada` / `rechazada` / `cancelada`
 - `presupuestos.estado`: `borrador` → `presentado` → `aceptado` / `rechazado` / `reemplazado`
 - `eventos.estado`: `confirmado` → `en_preparacion` → `realizado` / `cancelado`
-- `servicios_x_evento.estado_proveedor`: `solicitada` → `confirmada` → `en_seguimiento` → `finalizada` (o `rechazada`)
+- `servicios_x_evento.estado_proveedor`: `pendiente` → `confirmado` → `completado` (o `rechazado`)
+- `servicios_x_evento.estado_servicio`: `acordado` → `cancelado` (un servicio quitado no se borra)
 - `tareas.estado_tarea`: `pendiente` → `en_curso` → `completada`
 
 ## Niveles de acceso
@@ -137,10 +139,10 @@ La tabla de **permisos por ruta** está en la sección "Fase 10" de `docs/API.md
    - las otras versiones abiertas de la misma solicitud pasan a `reemplazado`;
    - la solicitud pasa a `aceptada`;
    - se crea el `evento`;
-   - cada renglón del detalle se copia a `servicios_x_evento` con estado `solicitada`.
-5. **Secuencia de tareas con proveedor** (tabla `tipos_tarea`): una tarea de
-   orden N no puede pasar a `en_curso` ni a `completada` si la de orden N−1 del
-   mismo `servicio_x_evento` no está `completada`. Si pasa, la API responde **409**.
+   - cada renglón del detalle se copia a `servicios_x_evento` con estado `pendiente`.
+5. **Pasos con el proveedor opcionales** (desde la Fase 11): `tipos_tarea` es
+   una guía. Se crean los pasos que hagan falta y se completan en cualquier
+   orden. **No hay regla de secuencia.**
 6. **Tarea completada ≠ proveedor confirmado.** Completar una tarea **no**
    cambia `estado_proveedor`. El estado del proveedor se actualiza por separado.
 7. Al completar una tarea se guarda `fecha_finalizacion = CURRENT_DATE`. Si la
@@ -158,7 +160,21 @@ La tabla de **permisos por ruta** está en la sección "Fase 10" de `docs/API.md
 11. **Alcance del rol `empleado`**: solo ve y cambia **sus** tareas (las de otro
     responden 404). Puede gestionar el proveedor de un servicio solo si es
     responsable de alguna tarea de ese servicio, y solo `estado_proveedor` y
-    `observaciones`. Nunca recibe importes ni costos.
+    `observaciones`. Nunca recibe importes ni costos. Desde la Fase 11, además,
+    ve el **resumen completo** de los eventos donde tiene tareas (servicios,
+    estados de proveedores y tareas de los demás), sin importes.
+12. **El sistema registra, no decide** (criterio del cliente): todo cambio de un
+    evento confirmado (fecha, sede, condiciones, asistentes, servicios,
+    proveedor) se registra en `cambios_evento` con motivo obligatorio, quién y
+    cuándo. Si cambia la fecha o la sede, todos los servicios quedan "a
+    revisar"; si cambia un servicio, solo ese. Las tareas afectadas las elige
+    el usuario. El sistema **nunca** reprograma tareas, cambia proveedores ni
+    da algo por confirmado por su cuenta. "A revisar" se calcula (hay un
+    afectado sin revisar), no se guarda.
+13. **Indicadores**: un evento muestra `tareas X de Y` y `servicios confirmados
+    X de Y` por separado, y una `alerta` mientras haya servicios sin confirmar
+    o compromisos a revisar. Terminar las tareas no apaga la alerta. Los
+    servicios cancelados no cuentan.
 
 ## Cómo trabajar en este repo
 

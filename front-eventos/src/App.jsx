@@ -23,6 +23,9 @@ const EventoDetalle = lazy(() => import("./paginas/Eventos").then((m) => ({ defa
 const MisTareas = lazy(() => import("./componentes/TareasEvento").then((m) => ({ default: m.MisTareas })));
 const MisTareasEmpleado = lazy(() => import("./paginas/MisTareasEmpleado"));
 const Seguimiento = lazy(() => import("./paginas/Seguimiento"));
+const EventosPorEstado = lazy(() => import("./paginas/EventosPorEstado"));
+const MisEventos = lazy(() => import("./paginas/MisEventos"));
+const MiEventoDetalle = lazy(() => import("./paginas/MisEventos").then((m) => ({ default: m.MiEventoDetalle })));
 const Usuarios = lazy(() => import("./paginas/Usuarios"));
 const MiEmpresa = lazy(() => import("./paginas/MiEmpresa"));
 const ResumenSistema = lazy(() => import("./paginas/superadmin/ResumenSistema"));
@@ -55,7 +58,10 @@ export default function App() {
       <Route path="/superadmin/empresas" element={<EmpresasSistema />} />
       <Route path="/superadmin/empresas/:id" element={<EmpresaSistema />} />
       <Route path="/seguimiento" element={<Seguimiento />} />
+      <Route path="/eventos-por-estado" element={<EventosPorEstado />} />
       <Route path="/mis-tareas" element={<MisTareasSegunRol />} />
+      <Route path="/mis-eventos" element={<MisEventos />} />
+      <Route path="/mis-eventos/:id" element={<MiEventoDetalle />} />
       <Route path="/solicitudes" element={<Solicitudes />} />
       <Route path="/solicitudes/:id" element={<SolicitudDetalle />} />
       <Route path="/presupuestos/:id" element={<Presupuesto />} />

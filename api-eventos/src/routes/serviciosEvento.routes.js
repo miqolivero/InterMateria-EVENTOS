@@ -1,6 +1,9 @@
 import { Router } from "express";
 import {
-  actualizarServicioEvento,
+  modificarServicioEvento,
+  cambiarProveedor,
+  cancelarServicio,
+  cambiarEstadoProveedor,
   generarTareas
 } from "../controllers/serviciosEvento.controller.js";
 import { validarParamId } from "../middlewares/validarId.middleware.js";
@@ -12,14 +15,24 @@ const router = Router();
 router.param("id", validarParamId("Servicio del evento no encontrado"));
 
 // index.js deja entrar a admin, coordinador y empleado. El empleado solo usa
-// el PATCH, y el controller lo limita a los servicios donde tiene tareas.
+// el seguimiento del proveedor (/estado), y el controller lo limita a los
+// servicios donde tiene tareas.
+router.patch("/:id/estado", cambiarEstadoProveedor);
 
-// El listado de los servicios de un evento esta en GET /api/eventos/:id/servicios
+// Todo lo que sigue es de admin y coordinador. Va con router.use para que una
+// ruta nueva que se agregue abajo nazca cerrada para el empleado.
+router.use(permitirRoles("admin", "coordinador"));
 
-// Estado del proveedor, proveedor, importes y observaciones (parcial)
-router.patch("/:id", actualizarServicioEvento);
+// El listado de los servicios de un evento y el alta de uno nuevo cuelgan del
+// evento: GET y POST /api/eventos/:id/servicios
 
-// Los 4 pasos de la secuencia con el proveedor
-router.post("/:id/generar-tareas", permitirRoles("admin", "coordinador"), generarTareas);
+// Cambios de lo acordado (Fase 11): con motivo y registrados en el historial.
+// El PATCH /:id de la Fase 6 ya no existe: se reparte entre estos y /estado.
+router.put("/:id", modificarServicioEvento);
+router.put("/:id/proveedor", cambiarProveedor);
+router.patch("/:id/cancelar", cancelarServicio);
+
+// Los pasos elegidos con el proveedor
+router.post("/:id/generar-tareas", generarTareas);
 
 export default router;

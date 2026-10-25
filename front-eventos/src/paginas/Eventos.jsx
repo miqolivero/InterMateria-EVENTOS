@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { Button, Calendar, Card, DatePicker, Descriptions, Input, Select, Skeleton, Space, Table, Tabs } from "antd";
-import { listarEventos, obtenerEvento, editarEvento, iniciarPreparacion } from "../servicios/operacionService.js";
+import { Badge, Button, Calendar, Card, DatePicker, Descriptions, Input, Select, Skeleton, Space, Table, Tabs } from "antd";
+import { listarEventos, obtenerEvento, editarEvento, iniciarPreparacion, resumenEvento } from "../servicios/operacionService.js";
 import { listarCatalogo } from "../servicios/catalogosService.js";
 import { useConsulta } from "../contexto/useConsulta.js";
 import { useAccion } from "../contexto/useAccion.js";
@@ -14,6 +14,9 @@ import EditorEvento from "../componentes/EditorEvento";
 import ServiciosEvento from "../componentes/ServiciosEvento";
 import TareasEvento from "../componentes/TareasEvento";
 import CierreEvento from "../componentes/CierreEvento";
+import Indicadores from "../componentes/Indicadores";
+import RevisionesPendientes from "../componentes/RevisionesPendientes";
+import HistorialCambios from "../componentes/HistorialCambios";
 
 export default function Eventos() {
   const [filtros, setFiltros] = useState({});
@@ -50,38 +53,49 @@ export function EventoDetalle() {
   const [editor, setEditor] = useState(false);
   const [pestana, setPestana] = useState("resumen");
   const { ocupado, ejecutar } = useAccion();
+  // Los indicadores salen de /resumen y se recargan con cada cambio del
+  // evento. version vuelve a montar las pestañas que muestran "a revisar".
+  const [version, setVersion] = useState(0);
+  const indicadores = useConsulta(useCallback(async () => (await resumenEvento(id)).data.indicadores, [id]));
+  const actualizar = () => { consulta.recargar(); indicadores.recargar(); setVersion((v) => v + 1); };
   if (consulta.cargando) return <Skeleton active />;
   if (consulta.error) return <ErrorConsulta {...consulta} />;
   const e = consulta.datos;
   const editable = e.editable === true && ["confirmado", "en_preparacion"].includes(e.estado);
-  const resumen = <Card><Descriptions column={{ xs: 1, md: 2 }} items={[
+  const resumen = <><Card title="Avance" className="aviso-formulario" loading={indicadores.cargando}><ErrorConsulta {...indicadores} />
+    <Indicadores indicadores={indicadores.datos} /></Card><Card><Descriptions column={{ xs: 1, md: 2 }} items={[
     { key: "cliente", label: "Cliente", children: nombreCompleto(e.cliente) },
     { key: "contacto", label: "Contacto", children: [e.cliente?.email, e.cliente?.telefono].filter(Boolean).join(" · ") || "—" },
     { key: "tipo", label: "Tipo", children: e.solicitud?.nombre_tipo_evento },
     { key: "fecha", label: "Fecha", children: formatearFecha(e.fecha_evento_confirmada) },
     { key: "sede", label: "Sede", children: e.sede_acordada || "—" },
-    { key: "asistentes", label: "Asistentes", children: e.solicitud?.cantidad_asistentes },
+    { key: "asistentes", label: "Asistentes", children: e.cantidad_asistentes },
     { key: "coordinador", label: "Coordinador", children: nombreCompleto(e.coordinador) },
     { key: "condiciones", label: "Condiciones", children: e.condiciones_acordadas || "—" },
     { key: "preferencias", label: "Preferencias", children: e.solicitud?.preferencias || "—" },
     { key: "solicitud", label: "Solicitud", children: e.solicitud && <Link to={`/solicitudes/${e.solicitud.id_solicitud}`}>Ver solicitud</Link> },
     { key: "presupuesto", label: "Presupuesto aceptado", children: e.presupuesto_aceptado && <Link to={`/presupuestos/${e.presupuesto_aceptado.id_presupuesto}`}>
       Versión {e.presupuesto_aceptado.numero_version} · {formatearMoneda(e.presupuesto_aceptado.importe_total)}</Link> }
-  ]} /></Card>;
+  ]} /></Card></>;
+  const pendientes = indicadores.datos?.pendientes_revision || 0;
   return <>
     <Link className="enlace-volver" to="/eventos">Volver a eventos</Link>
     <EncabezadoPagina titulo={`Evento #${id}`} acciones={<Space wrap><EstadoTag estado={e.estado} />
-      {editable && <Button onClick={() => setEditor(true)}>Editar</Button>}
+      {indicadores.datos?.alerta && <Badge status="error" text="Atención" />}
+      {editable && <Button onClick={() => setEditor(true)}>Cambiar lo acordado</Button>}
       {editable && e.estado === "confirmado" && <Button type="primary" loading={ocupado} onClick={async () => {
         const respuesta = await ejecutar(() => iniciarPreparacion(id)); if (respuesta.ok) consulta.recargar();
       }}>Iniciar preparación</Button>}
     </Space>} />
     <Tabs activeKey={pestana} onChange={setPestana} items={[
       { key: "resumen", label: "Resumen", children: resumen },
-      { key: "servicios", label: "Servicios", children: <ServiciosEvento id={id} editable={editable} actualizado={consulta.recargar} /> },
-      { key: "tareas", label: "Tareas", children: <TareasEvento id={id} editable={editable} /> },
-      { key: "cierre", label: "Cierre", children: <CierreEvento evento={e} actualizado={consulta.recargar} /> }
+      { key: "servicios", label: "Servicios", children: <ServiciosEvento id={id} editable={editable} actualizado={actualizar} /> },
+      { key: "tareas", label: "Tareas", children: <TareasEvento key={version} id={id} editable={editable} /> },
+      { key: "revisiones", label: <Badge count={pendientes} size="small" offset={[8, -2]}>A revisar</Badge>,
+        children: <RevisionesPendientes key={version} idEvento={id} editable={editable} actualizado={actualizar} /> },
+      { key: "historial", label: "Historial", children: <HistorialCambios key={version} idEvento={id} /> },
+      { key: "cierre", label: "Cierre", children: <CierreEvento evento={e} actualizado={actualizar} /> }
     ]} />
-    {editor && <EditorEvento datos={e} operacion={(body) => editarEvento(id, body)} cerrar={() => setEditor(false)} guardado={consulta.recargar} />}
+    {editor && <EditorEvento datos={e} conCambio titulo="Cambiar lo acordado" operacion={(body) => editarEvento(id, body)} cerrar={() => setEditor(false)} guardado={actualizar} />}
   </>;
 }

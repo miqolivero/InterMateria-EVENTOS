@@ -34,8 +34,8 @@ INSERT INTO empresas (id_empresa, nombre, cuit, email, telefono, direccion, acti
 -- -----------------------------------------------------------------------------
 -- Tipos de tarea: los 4 pasos del seguimiento de un proveedor
 -- -----------------------------------------------------------------------------
--- Tabla fija del sistema. El campo orden es el que hace cumplir la regla 5:
--- una tarea de orden N necesita la N-1 completada.
+-- Tabla fija del sistema. Desde la Fase 11 son una guia: cada servicio usa los
+-- pasos que necesita y se completan en cualquier orden. orden es para mostrar.
 INSERT INTO tipos_tarea (id_tipo_tarea, nombre, descripcion, orden) VALUES
 (1, 'Contactar al proveedor', 'Primer contacto para pedir disponibilidad y condiciones', 1),
 (2, 'Confirmar asistencia', 'Confirmar con el proveedor que va a prestar el servicio', 2),
@@ -169,9 +169,9 @@ INSERT INTO detalle_presupuesto (id_detalle, id_presupuesto, id_servicio, id_pro
 
 -- El evento que nacio al aceptar la version 2 (regla 4)
 INSERT INTO eventos (id_evento, id_empresa, id_solicitud, id_presupuesto_aceptado,
-                     id_empleado_coordinador, fecha_evento_confirmada, sede_acordada,
+                     id_empleado_coordinador, fecha_evento_confirmada, sede_acordada, cantidad_asistentes,
                      condiciones_acordadas, estado) VALUES
-(1, 1, 2, 2, 1, CURRENT_DATE + 25, 'Estancia El Molino',
+(1, 1, 2, 2, 1, CURRENT_DATE + 25, 'Estancia El Molino', 180,
  'Seña del 40% pagada. El saldo se abona 5 días antes del evento.', 'en_preparacion');
 
 -- Los servicios acordados: copia del detalle de la version 2, cada uno con su
@@ -181,13 +181,13 @@ INSERT INTO servicios_x_evento (id_servicio_x_evento, id_evento, id_servicio, id
                                 importe_acordado_cliente, estado_proveedor,
                                 fecha_confirmacion_proveedor, observaciones) VALUES
 (1, 1, 1, 1, 'Cena para 180 personas con servicio de mesa', 1,  950000.00, 1300000.00,
- 'confirmada', CURRENT_DATE - 10, 'Menú cerrado: entrada fria, plato principal y postre'),
+ 'confirmado', CURRENT_DATE - 10, 'Menú cerrado: entrada fria, plato principal y postre'),
 (2, 1, 2, 3, 'Ambientación de salón y ceremonia',            1,  250000.00,  350000.00,
- 'solicitada', NULL, 'Todavía no respondieron el presupuesto de flores'),
+ 'pendiente', NULL, 'Todavía no respondieron el presupuesto de flores'),
 (3, 1, 3, 2, 'Sonido e iluminación para 8 horas',            1,  300000.00,  400000.00,
- 'en_seguimiento', CURRENT_DATE - 12, NULL),
+ 'confirmado', CURRENT_DATE - 12, NULL),
 (4, 1, 4, 4, 'Cobertura fotográfica y video del evento',     1,  400000.00,  550000.00,
- 'solicitada', NULL, NULL);
+ 'pendiente', NULL, NULL);
 
 -- -----------------------------------------------------------------------------
 -- Tareas del evento 1
@@ -213,7 +213,7 @@ INSERT INTO tareas (id_tarea, id_evento, id_empleado_responsable, id_servicio_x_
 
 -- Fotografia: aca se ve la regla 6. Las tareas "Contactar" y "Confirmar
 -- asistencia" estan COMPLETADAS, pero el estado del proveedor sigue en
--- 'solicitada': que el empleado haya hecho el trabajo no significa que el
+-- 'pendiente': que el empleado haya hecho el trabajo no significa que el
 -- proveedor haya confirmado.
 INSERT INTO tareas (id_tarea, id_evento, id_empleado_responsable, id_servicio_x_evento,
                     id_tipo_tarea, descripcion, fecha_prevista, fecha_finalizacion,
@@ -266,7 +266,6 @@ INSERT INTO solicitudes (id_solicitud, id_empresa, id_cliente, id_tipo_evento,
 --   - importe_total de cada presupuesto = suma de su detalle (regla 2);
 --   - cada evento sale de un presupuesto aceptado y sus servicios son copia
 --     del detalle de ese presupuesto (regla 4);
---   - ninguna tarea arranco sin la anterior completada (regla 5);
 --   - los proveedores de cada renglon ofrecen ese servicio.
 --
 -- Resumen:
@@ -328,9 +327,9 @@ INSERT INTO detalle_presupuesto (id_detalle, id_presupuesto, id_servicio, id_pro
 -- Total: 1350000 + 350000 = 1700000
 
 INSERT INTO eventos (id_evento, id_empresa, id_solicitud, id_presupuesto_aceptado,
-                     id_empleado_coordinador, fecha_evento_confirmada, sede_acordada,
+                     id_empleado_coordinador, fecha_evento_confirmada, sede_acordada, cantidad_asistentes,
                      condiciones_acordadas, estado) VALUES
-(2, 1, 5, 4, 3, CURRENT_DATE + 10, 'Hotel Quinto Centenario',
+(2, 1, 5, 4, 3, CURRENT_DATE + 10, 'Hotel Quinto Centenario', 150,
  'Pago contra factura a 15 días', 'confirmado');
 
 INSERT INTO servicios_x_evento (id_servicio_x_evento, id_evento, id_servicio, id_proveedor,
@@ -338,9 +337,9 @@ INSERT INTO servicios_x_evento (id_servicio_x_evento, id_evento, id_servicio, id
                                 importe_acordado_cliente, estado_proveedor,
                                 fecha_confirmacion_proveedor, observaciones) VALUES
 (5, 2, 1, 1, 'Cena de fin de año para 150 personas',     150, 1000000.00, 1350000.00,
- 'confirmada', CURRENT_DATE - 5, NULL),
+ 'confirmado', CURRENT_DATE - 5, NULL),
 (6, 2, 3, 2, 'Sonido para discursos y musica funcional', 1,   250000.00,  350000.00,
- 'solicitada', NULL, 'Esperando que confirmen el equipo inalambrico');
+ 'pendiente', NULL, 'Esperando que confirmen el equipo inalambrico');
 
 -- Catering: el paso 3 quedo pendiente con la fecha de ayer -> vencida.
 -- El sonido (servicio_x_evento 6) todavia no tiene tareas generadas.
@@ -376,10 +375,10 @@ INSERT INTO detalle_presupuesto (id_detalle, id_presupuesto, id_servicio, id_pro
 -- Total v1: 2000000 + 600000 = 2600000 · Total v2: 1800000 + 550000 = 2350000
 
 INSERT INTO eventos (id_evento, id_empresa, id_solicitud, id_presupuesto_aceptado,
-                     id_empleado_coordinador, fecha_evento_confirmada, sede_acordada,
+                     id_empleado_coordinador, fecha_evento_confirmada, sede_acordada, cantidad_asistentes,
                      condiciones_acordadas, estado, observaciones_cierre,
                      feedback_cliente, fecha_cierre) VALUES
-(3, 1, 6, 6, 1, CURRENT_DATE - 15, 'Club Atlético Belgrano',
+(3, 1, 6, 6, 1, CURRENT_DATE - 15, 'Club Atlético Belgrano', 250,
  'Seña del 50%. Saldo en dos cuotas.', 'realizado',
  'Todo según lo previsto. El DJ extendió una hora a pedido de los chicos.',
  'Excelente organización, los chicos quedaron muy contentos.', CURRENT_DATE - 14);
@@ -389,9 +388,9 @@ INSERT INTO servicios_x_evento (id_servicio_x_evento, id_evento, id_servicio, id
                                 importe_acordado_cliente, estado_proveedor,
                                 fecha_confirmacion_proveedor, observaciones) VALUES
 (7, 3, 1, 1, 'Menú de pasos para 250 personas', 250, 1400000.00, 1800000.00,
- 'finalizada', CURRENT_DATE - 40, NULL),
+ 'completado', CURRENT_DATE - 40, NULL),
 (8, 3, 5, 2, 'DJ y animación por 6 horas',       1,  400000.00,  550000.00,
- 'finalizada', CURRENT_DATE - 38, 'Cobró una hora extra aparte');
+ 'completado', CURRENT_DATE - 38, 'Cobró una hora extra aparte');
 
 -- Las 8 tareas completas: el evento ya paso
 INSERT INTO tareas (id_tarea, id_evento, id_empleado_responsable, id_servicio_x_evento,
@@ -426,9 +425,9 @@ INSERT INTO detalle_presupuesto (id_detalle, id_presupuesto, id_servicio, id_pro
 (16, 7, 4, 4, 'Fotografía de la fiesta y book previo', 1, 350000.00, 480000.00);
 
 INSERT INTO eventos (id_evento, id_empresa, id_solicitud, id_presupuesto_aceptado,
-                     id_empleado_coordinador, fecha_evento_confirmada, sede_acordada,
+                     id_empleado_coordinador, fecha_evento_confirmada, sede_acordada, cantidad_asistentes,
                      condiciones_acordadas, estado, observaciones_cierre, fecha_cierre) VALUES
-(4, 1, 7, 7, 2, CURRENT_DATE + 40, 'Salón Las Palmas', 'Seña del 30%', 'cancelado',
+(4, 1, 7, 7, 2, CURRENT_DATE + 40, 'Salón Las Palmas', 100, 'Seña del 30%', 'cancelado',
  'La familia canceló por un viaje al exterior. Se devolvió la seña.', CURRENT_DATE - 2);
 
 INSERT INTO servicios_x_evento (id_servicio_x_evento, id_evento, id_servicio, id_proveedor,
@@ -436,7 +435,7 @@ INSERT INTO servicios_x_evento (id_servicio_x_evento, id_evento, id_servicio, id
                                 importe_acordado_cliente, estado_proveedor,
                                 fecha_confirmacion_proveedor, observaciones) VALUES
 (9, 4, 4, 4, 'Fotografía de la fiesta y book previo', 1, 350000.00, 480000.00,
- 'solicitada', NULL, NULL);
+ 'pendiente', NULL, NULL);
 
 INSERT INTO tareas (id_tarea, id_evento, id_empleado_responsable, id_servicio_x_evento,
                     id_tipo_tarea, descripcion, fecha_prevista, fecha_finalizacion,
@@ -498,18 +497,18 @@ INSERT INTO detalle_presupuesto (id_detalle, id_presupuesto, id_servicio, id_pro
 -- Total: 260000 + 150000 = 410000
 
 INSERT INTO eventos (id_evento, id_empresa, id_solicitud, id_presupuesto_aceptado,
-                     id_empleado_coordinador, fecha_evento_confirmada, sede_acordada,
+                     id_empleado_coordinador, fecha_evento_confirmada, sede_acordada, cantidad_asistentes,
                      condiciones_acordadas, estado) VALUES
-(5, 2, 9, 9, 5, CURRENT_DATE + 6, 'Salón Pequeños Gigantes', 'Pago total por adelantado', 'en_preparacion');
+(5, 2, 9, 9, 5, CURRENT_DATE + 6, 'Salón Pequeños Gigantes', 35, 'Pago total por adelantado', 'en_preparacion');
 
 INSERT INTO servicios_x_evento (id_servicio_x_evento, id_evento, id_servicio, id_proveedor,
                                 descripcion, cantidad, costo_acordado_proveedor,
                                 importe_acordado_cliente, estado_proveedor,
                                 fecha_confirmacion_proveedor, observaciones) VALUES
 (10, 5, 6, 5,    'Mesa dulce y comida para 35 chicos', 35, 180000.00, 260000.00,
- 'confirmada', CURRENT_DATE - 8, NULL),
+ 'confirmado', CURRENT_DATE - 8, NULL),
 (11, 5, 7, NULL, 'Animación de 3 horas',                1,       0.00, 150000.00,
- 'solicitada', NULL, 'La hace el personal propio');
+ 'pendiente', NULL, 'La hace el personal propio');
 
 INSERT INTO tareas (id_tarea, id_evento, id_empleado_responsable, id_servicio_x_evento,
                     id_tipo_tarea, descripcion, fecha_prevista, fecha_finalizacion,
@@ -536,16 +535,16 @@ INSERT INTO detalle_presupuesto (id_detalle, id_presupuesto, id_servicio, id_pro
 (20, 10, 6, 5, 'Mesa dulce y comida para 50 chicos', 50, 200000.00, 300000.00);
 
 INSERT INTO eventos (id_evento, id_empresa, id_solicitud, id_presupuesto_aceptado,
-                     id_empleado_coordinador, fecha_evento_confirmada, sede_acordada,
+                     id_empleado_coordinador, fecha_evento_confirmada, sede_acordada, cantidad_asistentes,
                      condiciones_acordadas, estado) VALUES
-(6, 2, 10, 10, NULL, CURRENT_DATE + 20, 'Salón Girasoles', NULL, 'confirmado');
+(6, 2, 10, 10, NULL, CURRENT_DATE + 20, 'Salón Girasoles', 50, NULL, 'confirmado');
 
 INSERT INTO servicios_x_evento (id_servicio_x_evento, id_evento, id_servicio, id_proveedor,
                                 descripcion, cantidad, costo_acordado_proveedor,
                                 importe_acordado_cliente, estado_proveedor,
                                 fecha_confirmacion_proveedor, observaciones) VALUES
 (12, 6, 6, 5, 'Mesa dulce y comida para 50 chicos', 50, 200000.00, 300000.00,
- 'solicitada', NULL, NULL);
+ 'pendiente', NULL, NULL);
 
 -- =============================================================================
 -- Fase 10 · tareas libres de Carla Vega (la usuaria con rol empleado)
@@ -558,6 +557,68 @@ INSERT INTO tareas (id_tarea, id_evento, id_empleado_responsable, id_servicio_x_
                     estado_tarea, observaciones) VALUES
 (40, 2, 3, NULL, NULL, 'Imprimir las tarjetas de ubicación de las mesas', CURRENT_DATE - 2, NULL, 'pendiente', NULL),
 (41, 1, 3, NULL, NULL, 'Retirar los centros de mesa del depósito',       CURRENT_DATE + 6, NULL, 'en_curso',  'Están en el depósito de la calle Ituzaingó');
+
+-- =============================================================================
+-- Fase 11 · cambios despues de confirmar, compromisos a revisar
+-- =============================================================================
+-- Lo que paso con el evento 1 (casamiento de Juan Pérez) despues de confirmar:
+--   1. hace 6 dias el cliente movio la fecha una semana: los 4 servicios
+--      acordados quedaron a revisar, mas dos tareas que eligio el coordinador.
+--      El catering ya se reviso; la decoracion y el sonido no;
+--   2. hace 4 dias Flores y Ambientes rechazo por la fecha nueva y se lo
+--      reemplazo por Deco Fiestas, que todavia no confirmo;
+--   3. hace 3 dias el cliente decidio no contratar fotografia: el servicio
+--      queda cancelado (no se borra) y sus dos tareas pendientes, a revisar.
+-- Ninguna tarea se reprogramo ni se cancelo sola: el sistema no decide.
+
+-- El proveedor que reemplaza a Flores y Ambientes en la decoracion
+INSERT INTO proveedores (id_proveedor, id_empresa, razon_social, cuit, email, telefono, observaciones) VALUES
+(6, 1, 'Deco Fiestas', '30-66667778-9', 'pedidos@decofiestas.com', '351-4775500', NULL);
+
+INSERT INTO proveedores_x_servicio (id_proveedor, id_servicio) VALUES
+(6, 2);
+
+UPDATE servicios_x_evento
+SET id_proveedor = 6, estado_proveedor = 'pendiente', fecha_confirmacion_proveedor = NULL,
+    observaciones = 'Flores y Ambientes rechazó por la fecha nueva. Se le pidió presupuesto a Deco Fiestas'
+WHERE id_servicio_x_evento = 2;
+
+UPDATE servicios_x_evento SET estado_servicio = 'cancelado' WHERE id_servicio_x_evento = 4;
+
+INSERT INTO cambios_evento (id_cambio, id_evento, id_usuario, fecha_hora, tipo, id_servicio_x_evento,
+                            id_proveedor_anterior, id_proveedor_nuevo, descripcion,
+                            valor_anterior, valor_nuevo, motivo) VALUES
+(1, 1, 2, NOW() - INTERVAL '6 days', 'fecha', NULL, NULL, NULL, 'Cambio de fecha del evento',
+ (CURRENT_DATE + 18)::text, (CURRENT_DATE + 25)::text,
+ 'El cliente consiguió la estancia recién para una semana después'),
+(2, 1, 2, NOW() - INTERVAL '4 days', 'proveedor_cambiado', 2, 3, 6, 'Cambio de proveedor de Decoración',
+ 'Flores y Ambientes', 'Deco Fiestas',
+ 'Flores y Ambientes rechazó por superposición de fechas'),
+(3, 1, 1, NOW() - INTERVAL '3 days', 'servicio_cancelado', 4, NULL, NULL, 'Se cancelo el servicio Fotografía y video',
+ 'acordado', 'cancelado',
+ 'El cliente decidió no contratar fotografía');
+
+INSERT INTO afectados_cambio (id_afectado, id_cambio, id_servicio_x_evento, id_tarea, revisado,
+                              id_usuario_revision, fecha_revision, nota_revision) VALUES
+-- Cambio de fecha: los 4 servicios acordados en ese momento...
+(1, 1, 1,    NULL, TRUE,  2,    NOW() - INTERVAL '5 days', 'Doña Rosa confirma igual para la fecha nueva'),
+(2, 1, 2,    NULL, FALSE, NULL, NULL, NULL),
+(3, 1, 3,    NULL, FALSE, NULL, NULL, NULL),
+(4, 1, 4,    NULL, TRUE,  1,    NOW() - INTERVAL '3 days', 'Se canceló el servicio, ver el cambio del historial'),
+-- ...y las tareas que eligio el coordinador (la 41 es de Carla, la empleada)
+(5, 1, NULL, 3,    FALSE, NULL, NULL, NULL),
+(6, 1, NULL, 41,   FALSE, NULL, NULL, NULL),
+-- Fotografia cancelada: sus tareas siguen ahi, a revisar
+(7, 3, NULL, 11,   FALSE, NULL, NULL, NULL),
+(8, 3, NULL, 12,   FALSE, NULL, NULL, NULL);
+
+-- Solicitud 11: CANCELADA antes de presupuestar. Con la 4 (esperando
+-- respuesta) y la 8 (rechazada) completa los casos de "eventos por estado".
+INSERT INTO solicitudes (id_solicitud, id_empresa, id_cliente, id_tipo_evento,
+                         fecha_solicitud, fecha_evento_prevista, cantidad_asistentes,
+                         sede_prevista, preferencias, estado) VALUES
+(11, 1, 2, 4, CURRENT_DATE - 20, CURRENT_DATE + 60, 70,
+ NULL, 'Brindis de fin de año de su estudio. Desistió antes del presupuesto', 'cancelada');
 
 -- =============================================================================
 -- Reacomodar las secuencias
@@ -580,3 +641,5 @@ SELECT setval('eventos_id_evento_seq',                       (SELECT MAX(id_even
 SELECT setval('servicios_x_evento_id_servicio_x_evento_seq', (SELECT MAX(id_servicio_x_evento) FROM servicios_x_evento));
 SELECT setval('tipos_tarea_id_tipo_tarea_seq',               (SELECT MAX(id_tipo_tarea) FROM tipos_tarea));
 SELECT setval('tareas_id_tarea_seq',                         (SELECT MAX(id_tarea) FROM tareas));
+SELECT setval('cambios_evento_id_cambio_seq',                (SELECT MAX(id_cambio) FROM cambios_evento));
+SELECT setval('afectados_cambio_id_afectado_seq',            (SELECT MAX(id_afectado) FROM afectados_cambio));

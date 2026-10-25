@@ -6,19 +6,26 @@ import {
   ESTADOS_EVENTO_ABIERTO,
   MENSAJE_EVENTO_CERRADO
 } from "./eventos.controller.js";
+import {
+  CONDICION_VENCIDA,
+  servicioARevisar,
+  tareaARevisar,
+  tareaPendientesRevision
+} from "../utils/indicadores.js";
 
 // Tareas: el trabajo del personal en cada evento. Hay dos clases:
-// - de la secuencia del proveedor: tienen id_tipo_tarea y siguen el orden de
-//   tipos_tarea (contactar -> confirmar -> seguimiento -> cierre). Se crean
-//   con "generar tareas" en servicios-evento;
-// - libres: trabajo interno, sin tipo ni secuencia.
+// - pasos con un proveedor: tienen id_tipo_tarea (contactar, confirmar,
+//   seguimiento, cierre). Se crean con "generar tareas" en servicios-evento,
+//   eligiendo los pasos que hacen falta;
+// - libres: trabajo interno, sin tipo.
 //
 // La tabla tareas no tiene id_empresa: una tarea es de la empresa de su
 // evento. Por eso todo entra por JOIN eventos e ... AND e.id_empresa.
 //
 // Reglas de CLAUDE.md que se aplican aca:
 // - Regla 1: "vencida" no se guarda, se calcula en el SQL.
-// - Regla 5: un paso no arranca si el anterior no esta completado.
+// - Regla 5 (Fase 11): YA NO hay secuencia. Los pasos se completan en
+//   cualquier orden; tipos_tarea es una guia.
 // - Regla 6: completar una tarea NO cambia el estado del proveedor.
 // - Regla 7: completar guarda fecha_finalizacion; reabrir la limpia.
 // - Regla 9: el responsable es un empleado activo de la empresa.
@@ -30,22 +37,20 @@ const MENSAJES = {
   responsableInvalido: "El responsable no es un empleado activo de la empresa",
   servicioAjeno: "El servicio no pertenece a este evento",
   estadoInvalido: "Estado de tarea invalido",
-  reabrir: "No se puede reabrir: el paso siguiente ya empezo",
-  noEliminable: "Las tareas de la secuencia del proveedor no se pueden eliminar"
+  noEliminable: "Las tareas de la secuencia del proveedor no se pueden eliminar",
+  conRevisiones: "La tarea tiene revisiones registradas y no se puede eliminar"
 };
 
 const ESTADOS_TAREA = ["pendiente", "en_curso", "completada"];
 
-// Regla 1, escrita una sola vez. Una tarea sin fecha prevista nunca esta
-// vencida (null < fecha da null, por eso se chequea aparte). Se exporta para
-// que el tablero de seguimiento (fase 7) cuente exactamente lo mismo.
-export const CONDICION_VENCIDA = `(t.fecha_prevista IS NOT NULL
-   AND t.fecha_prevista < CURRENT_DATE
-   AND t.estado_tarea <> 'completada')`;
+// Regla 1: la definicion vive en utils/indicadores.js. Se reexporta porque el
+// tablero de seguimiento la importa desde aca.
+export { CONDICION_VENCIDA };
 
 // Objeto Tarea del contrato. Servicio, proveedor, tipo y responsable van con
 // LEFT JOIN porque en una tarea libre no existen, y la tarea no puede
-// desaparecer del listado por eso.
+// desaparecer del listado por eso. a_revisar y pendientes_revision (Fase 11)
+// se calculan, igual que vencida.
 //
 // columnasExtra / joinsExtra: "mis tareas" agrega datos del evento (cliente,
 // tipo, fecha) sin repetir toda la consulta.
@@ -58,7 +63,9 @@ export const selectTarea = (columnasExtra = "", joinsExtra = "") => `
          emp.nombre || ' ' || emp.apellido AS nombre_responsable,
          t.fecha_prevista, t.fecha_finalizacion, t.estado_tarea,
          t.observaciones,
-         ${CONDICION_VENCIDA} AS vencida
+         ${CONDICION_VENCIDA} AS vencida,
+         ${tareaARevisar("t")} AS a_revisar,
+         ${tareaPendientesRevision("t")} AS pendientes_revision
          ${columnasExtra}
   FROM tareas t
   JOIN eventos e ON e.id_evento = t.id_evento
@@ -117,15 +124,14 @@ export const responsableObligatorio = (usuario) =>
   usuario.rol === "empleado" ? usuario.id_empleado : null;
 
 // Datos de la tarea que hacen falta para validar un cambio: su evento (y si
-// esta abierto) y si es de la secuencia.
+// esta abierto) y si es un paso con el proveedor.
 // idResponsable: si viene (rol empleado), la tarea tiene que ser suya.
 const datosTarea = async (ejecutor, idTarea, idEmpresa, idResponsable = null) => {
   const resultado = await ejecutor.query(
     `SELECT t.id_tarea, t.id_evento, t.id_servicio_x_evento, t.id_tipo_tarea,
-            t.estado_tarea, tt.orden, e.estado AS estado_evento
+            t.estado_tarea, e.estado AS estado_evento
      FROM tareas t
      JOIN eventos e ON e.id_evento = t.id_evento
-     LEFT JOIN tipos_tarea tt ON tt.id_tipo_tarea = t.id_tipo_tarea
      WHERE t.id_tarea = $1 AND e.id_empresa = $2
        AND ($3::int IS NULL OR t.id_empleado_responsable = $3::int)`,
     [idTarea, idEmpresa, idResponsable]
@@ -193,8 +199,7 @@ export const obtenerTareasDelEvento = async (req, res) => {
 };
 
 // POST /api/eventos/:id/tareas
-// Tarea libre: sin tipo, fuera de la secuencia. Opcionalmente asociada a un
-// servicio del mismo evento.
+// Tarea libre: sin tipo. Opcionalmente asociada a un servicio del mismo evento.
 export const crearTarea = async (req, res) => {
   const idEmpresa = req.usuario.id_empresa;
   const {
@@ -240,7 +245,7 @@ export const crearTarea = async (req, res) => {
     }
 
     // estado_tarea ('pendiente') lo pone el DEFAULT. id_tipo_tarea queda null:
-    // por eso es libre y no entra en la secuencia.
+    // por eso es libre.
     const resultado = await pool.query(
       `INSERT INTO tareas (id_evento, id_empleado_responsable, id_servicio_x_evento,
                            descripcion, fecha_prevista, observaciones)
@@ -266,7 +271,8 @@ export const crearTarea = async (req, res) => {
 
 // PUT /api/tareas/:id
 // Edita descripcion, responsable, fecha prevista y observaciones. El estado
-// se cambia con el PATCH, que es donde se controla la secuencia.
+// se cambia con el PATCH. Reprogramar una tarea a revisar es una decision del
+// usuario: se hace aca, nunca sola.
 export const editarTarea = async (req, res) => {
   const idEmpresa = req.usuario.id_empresa;
   const { descripcion, id_empleado_responsable, fecha_prevista, observaciones } =
@@ -307,9 +313,10 @@ export const editarTarea = async (req, res) => {
 };
 
 // PATCH /api/tareas/:id/estado
-// Aca viven las reglas 5 y 7. Va en una transaccion con las tareas del
-// servicio bloqueadas: si dos personas cambian el paso 1 y el paso 2 a la vez,
-// una espera a la otra y la secuencia no se puede romper.
+// Regla 7. Desde la Fase 11 no hay secuencia: cualquier paso pasa a cualquier
+// estado, en cualquier orden. El estado del evento y el responsable (para el
+// empleado) van en el WHERE del UPDATE, asi el chequeo y el cambio son una
+// sola operacion y no hace falta bloquear nada.
 export const cambiarEstadoTarea = async (req, res) => {
   const idEmpresa = req.usuario.id_empresa;
   const { estado_tarea } = req.body;
@@ -318,113 +325,60 @@ export const cambiarEstadoTarea = async (req, res) => {
     return res.status(400).json({ mensaje: MENSAJES.estadoInvalido });
   }
 
-  const client = await pool.connect();
-
   try {
-    await client.query("BEGIN");
-
     // Regla 11: el empleado solo encuentra SUS tareas (filtro en el WHERE)
     const tarea = await datosTarea(
-      client,
+      pool,
       req.params.id,
       idEmpresa,
       responsableObligatorio(req.usuario)
     );
 
     if (!tarea) {
-      await client.query("ROLLBACK");
       return res.status(404).json({ mensaje: MENSAJES.noEncontrada });
     }
 
     if (!ESTADOS_EVENTO_ABIERTO.includes(tarea.estado_evento)) {
-      await client.query("ROLLBACK");
       return res.status(409).json({ mensaje: MENSAJE_EVENTO_CERRADO });
-    }
-
-    // Solo las tareas de la secuencia tienen pasos vecinos. Las libres pasan
-    // a cualquier estado.
-    if (tarea.id_tipo_tarea && tarea.id_servicio_x_evento) {
-      // Se bloquean TODAS las tareas del servicio, siempre en el mismo orden.
-      // Si se bloqueara primero la tarea y despues el resto, dos pedidos sobre
-      // el paso 1 y el paso 2 podrian quedar esperandose entre si (deadlock).
-      // El estado actual se lee de aca, ya con las filas tomadas.
-      const pasos = await client.query(
-        `SELECT t.id_tarea, t.estado_tarea, tt.orden, tt.nombre
-         FROM tareas t
-         JOIN tipos_tarea tt ON tt.id_tipo_tarea = t.id_tipo_tarea
-         WHERE t.id_servicio_x_evento = $1
-         ORDER BY tt.orden
-         FOR UPDATE OF t`,
-        [tarea.id_servicio_x_evento]
-      );
-
-      // "Anterior" y "siguiente" son los pasos vecinos en el orden de
-      // tipos_tarea, no necesariamente orden - 1 y orden + 1.
-      const indice = pasos.rows.findIndex((p) => p.id_tarea === tarea.id_tarea);
-      const actual = pasos.rows[indice];
-      const anterior = pasos.rows[indice - 1];
-      const siguiente = pasos.rows[indice + 1];
-
-      // Regla 5: para arrancar (o terminar) un paso, el anterior tiene que
-      // estar completado
-      if (
-        anterior &&
-        estado_tarea !== "pendiente" &&
-        anterior.estado_tarea !== "completada"
-      ) {
-        await client.query("ROLLBACK");
-        return res
-          .status(409)
-          .json({ mensaje: `Primero hay que completar: ${anterior.nombre}` });
-      }
-
-      // Al reves: si el paso siguiente ya arranco, este no puede dejar de
-      // estar completado. Si no, quedaria un paso en curso con el anterior
-      // abierto, que es justo lo que la regla 5 prohibe.
-      if (
-        siguiente &&
-        actual.estado_tarea === "completada" &&
-        estado_tarea !== "completada" &&
-        siguiente.estado_tarea !== "pendiente"
-      ) {
-        await client.query("ROLLBACK");
-        return res.status(409).json({ mensaje: MENSAJES.reabrir });
-      }
     }
 
     // Regla 7: completar guarda la fecha (si ya estaba completada, conserva la
     // original). Cualquier otro estado la limpia.
     // Regla 6: aca NO se toca servicios_x_evento. Que la tarea "Confirmar
     // asistencia" este completada no significa que el proveedor confirmo.
+    // Tampoco se toca afectados_cambio: completar una tarea a revisar no la
+    // da por revisada (eso se hace con PATCH /revisiones/:id y una nota).
     // $1 va con ::varchar en los dos lugares: se usa como valor de la columna
     // y dentro del CASE, y sin el cast PostgreSQL deduce un tipo distinto
     // para cada uso y rechaza la consulta.
-    await client.query(
-      `UPDATE tareas
+    const resultado = await pool.query(
+      `UPDATE tareas t
        SET estado_tarea = $1::varchar,
            fecha_finalizacion = CASE WHEN $1::varchar = 'completada'
-                                     THEN COALESCE(fecha_finalizacion, CURRENT_DATE)
+                                     THEN COALESCE(t.fecha_finalizacion, CURRENT_DATE)
                                      ELSE NULL END
-       WHERE id_tarea = $2`,
-      [estado_tarea, req.params.id]
+       FROM eventos e
+       WHERE t.id_tarea = $2 AND e.id_evento = t.id_evento
+         AND e.estado = ANY($3)
+       RETURNING t.id_tarea`,
+      [estado_tarea, req.params.id, ESTADOS_EVENTO_ABIERTO]
     );
 
-    const respuesta = await buscarTarea(client, req.params.id, idEmpresa);
+    // El evento se cerro entre la lectura y el UPDATE
+    if (resultado.rows.length === 0) {
+      return res.status(409).json({ mensaje: MENSAJE_EVENTO_CERRADO });
+    }
 
-    await client.query("COMMIT");
-
-    res.json(respuesta);
+    res.json(await buscarTarea(pool, req.params.id, idEmpresa));
   } catch (error) {
-    await client.query("ROLLBACK");
     responderError(res, error);
-  } finally {
-    client.release();
   }
 };
 
 // DELETE /api/tareas/:id
-// Solo tareas libres. Las de la secuencia son el registro de lo que se hizo
-// con el proveedor: si se borrara una, la secuencia quedaria con un hueco.
+// Solo tareas libres. Las de los pasos con el proveedor son el registro de lo
+// que se hizo con el. Una tarea que quedo en afectados_cambio tampoco se
+// borra: la FK lo impide y el historial no pierde nada (409).
 export const eliminarTarea = async (req, res) => {
   const idEmpresa = req.usuario.id_empresa;
 
@@ -448,7 +402,7 @@ export const eliminarTarea = async (req, res) => {
 
     res.status(204).send();
   } catch (error) {
-    responderError(res, error);
+    responderError(res, error, { asociado: MENSAJES.conRevisiones });
   }
 };
 
@@ -459,20 +413,18 @@ export const eliminarTarea = async (req, res) => {
 // cada pedido, asi un cambio de vinculo se ve sin volver a loguearse.
 //
 // Ademas de los campos de siempre, cada tarea trae lo que el empleado necesita
-// para trabajar sin abrir el evento (al que no tiene acceso):
-//   - puede_avanzar: si el paso anterior de la secuencia esta completado,
-//     aunque sea de otro empleado (regla 5, calculada en el SQL);
+// para trabajar sin abrir el evento:
 //   - evento: los datos basicos del evento;
-//   - servicio: el servicio, su proveedor y los pasos de la secuencia.
+//   - servicio: el servicio, su proveedor, si esta cancelado o a revisar, y
+//     los pasos que tiene (como referencia: ya no bloquean nada).
 // Regla 11: NINGUNA columna de importes o costos. Los objetos se arman con
 // json_build_object campo por campo, nunca con un SELECT *, asi un campo nuevo
 // en la tabla no se cuela en la respuesta.
+
 // El objeto "servicio" del panel del empleado, o NULL en las tareas libres.
-// Lo usan /tareas/mias y la respuesta de PATCH /servicios-evento/:id para el
-// empleado, asi los dos devuelven exactamente lo mismo. Recibe los alias de
-// servicios_x_evento, servicios y proveedores de la consulta que lo usa.
-// pasos: la secuencia completa del servicio (sin responsables ni importes),
-// para que el front muestre en que paso esta cada tarea.
+// Lo usan /tareas/mias y la respuesta de PATCH /servicios-evento/:id/estado
+// para el empleado, asi los dos devuelven exactamente lo mismo. Recibe los
+// alias de servicios_x_evento, servicios y proveedores de la consulta que lo usa.
 export function objetoServicioEmpleado(sxe, sv, pr) {
   return `CASE WHEN ${sxe}.id_servicio_x_evento IS NULL THEN NULL ELSE json_build_object(
     'id_servicio_x_evento', ${sxe}.id_servicio_x_evento,
@@ -481,6 +433,8 @@ export function objetoServicioEmpleado(sxe, sv, pr) {
     'estado_proveedor', ${sxe}.estado_proveedor,
     'fecha_confirmacion_proveedor', ${sxe}.fecha_confirmacion_proveedor,
     'observaciones', ${sxe}.observaciones,
+    'estado_servicio', ${sxe}.estado_servicio,
+    'a_revisar', ${servicioARevisar(sxe)},
     'proveedor', CASE WHEN ${pr}.id_proveedor IS NULL THEN NULL ELSE json_build_object(
       'id_proveedor', ${pr}.id_proveedor,
       'razon_social', ${pr}.razon_social,
@@ -498,16 +452,6 @@ export function objetoServicioEmpleado(sxe, sv, pr) {
 }
 
 const COLUMNAS_PANEL_EMPLEADO = `,
-  CASE WHEN t.id_tipo_tarea IS NULL OR t.id_servicio_x_evento IS NULL THEN TRUE
-       ELSE COALESCE((
-         SELECT tp.estado_tarea = 'completada'
-         FROM tareas tp
-         JOIN tipos_tarea ttp ON ttp.id_tipo_tarea = tp.id_tipo_tarea
-         WHERE tp.id_servicio_x_evento = t.id_servicio_x_evento
-           AND ttp.orden < tt.orden
-         ORDER BY ttp.orden DESC
-         LIMIT 1), TRUE)
-  END AS puede_avanzar,
   json_build_object(
     'id_evento', e.id_evento,
     'nombre_tipo_evento', te.nombre,

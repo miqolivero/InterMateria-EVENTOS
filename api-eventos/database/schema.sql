@@ -12,6 +12,8 @@
 -- poder recrear la base de desarrollo las veces que haga falta.
 -- =============================================================================
 
+DROP TABLE IF EXISTS afectados_cambio CASCADE;
+DROP TABLE IF EXISTS cambios_evento CASCADE;
 DROP TABLE IF EXISTS tareas CASCADE;
 DROP TABLE IF EXISTS tipos_tarea CASCADE;
 DROP TABLE IF EXISTS servicios_x_evento CASCADE;
@@ -270,6 +272,9 @@ CREATE TABLE eventos (
     fecha_evento_confirmada DATE NOT NULL,
     sede_acordada VARCHAR(200),
     condiciones_acordadas TEXT,
+    -- La cantidad confirmada (Fase 11). Se copia de la solicitud al aceptar y
+    -- desde ahi puede cambiar, con su registro en cambios_evento.
+    cantidad_asistentes INTEGER NOT NULL CHECK (cantidad_asistentes > 0),
     estado VARCHAR(20) NOT NULL DEFAULT 'confirmado'
         CHECK (estado IN ('confirmado', 'en_preparacion',
                           'realizado', 'cancelado')),
@@ -301,21 +306,26 @@ CREATE TABLE servicios_x_evento (
     cantidad INTEGER NOT NULL DEFAULT 1 CHECK (cantidad > 0),
     costo_acordado_proveedor NUMERIC(12, 2) NOT NULL DEFAULT 0,
     importe_acordado_cliente NUMERIC(12, 2) NOT NULL DEFAULT 0,
-    estado_proveedor VARCHAR(20) NOT NULL DEFAULT 'solicitada'
-        CHECK (estado_proveedor IN ('solicitada', 'confirmada', 'en_seguimiento',
-                                    'finalizada', 'rechazada')),
+    estado_proveedor VARCHAR(20) NOT NULL DEFAULT 'pendiente'
+        CHECK (estado_proveedor IN ('pendiente', 'confirmado', 'completado',
+                                    'rechazado')),
     fecha_confirmacion_proveedor DATE,
-    observaciones TEXT
+    observaciones TEXT,
+    -- Un servicio quitado despues de confirmar no se borra (Fase 11): queda
+    -- 'cancelado' y se sigue viendo en el evento y en el historial.
+    estado_servicio VARCHAR(20) NOT NULL DEFAULT 'acordado'
+        CHECK (estado_servicio IN ('acordado', 'cancelado'))
 );
 
 CREATE INDEX idx_serv_x_evento_evento ON servicios_x_evento(id_evento);
 CREATE INDEX idx_serv_x_evento_estado ON servicios_x_evento(estado_proveedor);
 
 -- =============================================================================
--- 15. Tipos de tarea (los 4 pasos secuenciales con un proveedor)
+-- 15. Tipos de tarea (los pasos posibles con un proveedor)
 -- =============================================================================
--- Tabla fija del sistema, sin id_empresa: la secuencia es la misma para todas.
--- orden es UNIQUE porque define la secuencia de la regla 5.
+-- Tabla fija del sistema, sin id_empresa: los pasos son los mismos para todas.
+-- Desde la Fase 11 son una guia: se eligen los que hacen falta y se completan
+-- en cualquier orden. orden solo define como se muestran.
 CREATE TABLE tipos_tarea (
     id_tipo_tarea SERIAL PRIMARY KEY,
     nombre VARCHAR(100) NOT NULL,
@@ -348,3 +358,64 @@ CREATE INDEX idx_tareas_responsable ON tareas(id_empleado_responsable);
 CREATE INDEX idx_tareas_servicio_evento ON tareas(id_servicio_x_evento);
 CREATE INDEX idx_tareas_fecha_prevista ON tareas(fecha_prevista);
 CREATE INDEX idx_tareas_estado ON tareas(estado_tarea);
+-- Un servicio no puede tener dos tareas del mismo paso. Red de seguridad del
+-- 409 de generar-tareas. Las tareas libres (sin tipo) no entran.
+CREATE UNIQUE INDEX uq_tareas_servicio_paso ON tareas(id_servicio_x_evento, id_tipo_tarea)
+    WHERE id_tipo_tarea IS NOT NULL;
+
+-- =============================================================================
+-- 17. Historial de cambios del evento (Fase 11)
+-- =============================================================================
+-- Todo cambio de lo acordado despues de confirmar: quien, cuando, que cambio
+-- y por que. Una fila por campo cambiado. Nunca se borra ni se edita.
+-- descripcion es lo que ve el empleado: nunca lleva importes.
+CREATE TABLE cambios_evento (
+    id_cambio SERIAL PRIMARY KEY,
+    id_evento INTEGER NOT NULL REFERENCES eventos(id_evento),
+    id_usuario INTEGER NOT NULL REFERENCES usuarios(id_usuario),
+    fecha_hora TIMESTAMP NOT NULL DEFAULT NOW(),
+    tipo VARCHAR(30) NOT NULL
+        CHECK (tipo IN ('fecha', 'sede', 'condiciones', 'cantidad_asistentes',
+                        'servicio_agregado', 'servicio_modificado',
+                        'servicio_cancelado', 'proveedor_cambiado')),
+    id_servicio_x_evento INTEGER REFERENCES servicios_x_evento(id_servicio_x_evento),
+    id_proveedor_anterior INTEGER REFERENCES proveedores(id_proveedor),
+    id_proveedor_nuevo INTEGER REFERENCES proveedores(id_proveedor),
+    descripcion VARCHAR(300) NOT NULL,
+    valor_anterior TEXT,
+    valor_nuevo TEXT,
+    motivo TEXT NOT NULL CHECK (btrim(motivo) <> '')
+);
+
+CREATE INDEX idx_cambios_evento ON cambios_evento(id_evento);
+CREATE INDEX idx_cambios_usuario ON cambios_evento(id_usuario);
+CREATE INDEX idx_cambios_servicio ON cambios_evento(id_servicio_x_evento);
+CREATE INDEX idx_cambios_prov_anterior ON cambios_evento(id_proveedor_anterior);
+CREATE INDEX idx_cambios_prov_nuevo ON cambios_evento(id_proveedor_nuevo);
+
+-- =============================================================================
+-- 18. Compromisos afectados por un cambio, y su revision (Fase 11)
+-- =============================================================================
+-- "A revisar" NO es una columna: un servicio o una tarea esta a revisar si
+-- tiene alguna fila aca con revisado = false. Se calcula, igual que "vencida".
+-- Revisar solo deja constancia (quien, cuando y una nota): no cambia nada mas.
+CREATE TABLE afectados_cambio (
+    id_afectado SERIAL PRIMARY KEY,
+    id_cambio INTEGER NOT NULL REFERENCES cambios_evento(id_cambio),
+    id_servicio_x_evento INTEGER REFERENCES servicios_x_evento(id_servicio_x_evento),
+    id_tarea INTEGER REFERENCES tareas(id_tarea),
+    revisado BOOLEAN NOT NULL DEFAULT FALSE,
+    id_usuario_revision INTEGER REFERENCES usuarios(id_usuario),
+    fecha_revision TIMESTAMP,
+    nota_revision TEXT,
+    -- Exactamente uno de los dos: un servicio o una tarea
+    CONSTRAINT chk_afectado_uno CHECK ((id_servicio_x_evento IS NULL) <> (id_tarea IS NULL)),
+    -- Si esta revisado, se sabe quien y cuando
+    CONSTRAINT chk_afectado_revision CHECK (NOT revisado
+        OR (id_usuario_revision IS NOT NULL AND fecha_revision IS NOT NULL))
+);
+
+CREATE INDEX idx_afectados_cambio ON afectados_cambio(id_cambio);
+CREATE INDEX idx_afectados_servicio ON afectados_cambio(id_servicio_x_evento);
+CREATE INDEX idx_afectados_tarea ON afectados_cambio(id_tarea);
+CREATE INDEX idx_afectados_usuario ON afectados_cambio(id_usuario_revision);

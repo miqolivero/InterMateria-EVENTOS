@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Alert, Button, Card, DatePicker, Form, Input, Modal, Popconfirm, Select, Space, Steps, Table, Tag } from "antd";
+import { Alert, Button, Card, DatePicker, Form, Input, Modal, Popconfirm, Select, Space, Table, Tag } from "antd";
 import dayjs from "dayjs";
 import { tareasEvento, crearTarea, editarTarea, cambiarEstadoTarea, eliminarTarea, misTareas, serviciosEvento } from "../servicios/operacionService.js";
 import { listarCatalogo } from "../servicios/catalogosService.js";
@@ -9,10 +9,10 @@ import { useAccion } from "../contexto/useAccion.js";
 import { useSesion } from "../contexto/useSesion.js";
 import { fechaAPI, nombreCompleto, opcionesActivos } from "../utils/formularios.js";
 import { formatearFecha } from "../utils/formato.js";
-import { puedeCambiarTarea } from "../utils/tareas.js";
 import EstadoTag from "./EstadoTag";
 import ErrorConsulta from "./ErrorConsulta";
 import EncabezadoPagina from "./EncabezadoPagina";
+import "./Cambios.css";
 
 function EditorTarea({ id, datos, cerrar, guardado }) {
   const [form] = Form.useForm();
@@ -42,19 +42,21 @@ function EditorTarea({ id, datos, cerrar, guardado }) {
   </Modal>;
 }
 
-export function TablaTareas({ tareas, editable, actualizar, editar, solicitarCambio, mostrarEvento = false, secuenciaCompleta = tareas }) {
+// Fase 11: sin secuencia. Cualquier estado se puede elegir; "A revisar" marca
+// las tareas que quedaron afectadas por un cambio del evento.
+export function TablaTareas({ tareas, editable, actualizar, editar, mostrarEvento = false }) {
   const { ocupado, ejecutar } = useAccion();
   return <Table rowKey="id_tarea" dataSource={tareas} pagination={false} scroll={{ x: 850 }} columns={[
-    { title: "Tarea", dataIndex: "descripcion", render: (v, tarea) => <Space orientation="vertical" size={4}><span>{v}</span>{tarea.vencida && <Tag color="red">Vencida</Tag>}</Space> },
+    { title: "Tarea", dataIndex: "descripcion", render: (v, tarea) => <Space orientation="vertical" size={4}><span>{v}</span><Space size={4} wrap>{tarea.vencida && <Tag color="red">Vencida</Tag>}
+      {tarea.a_revisar && <Tag color="orange">A revisar</Tag>}</Space></Space> },
     ...(mostrarEvento ? [{ title: "Evento", key: "evento", render: (_, t) => <Link to={`/eventos/${t.id_evento}`}>{t.nombre_cliente || `Evento #${t.id_evento}`}</Link> }] : []),
     { title: "Responsable", dataIndex: "nombre_responsable", render: (v) => v || "Sin asignar" },
     { title: "Fecha prevista", dataIndex: "fecha_prevista", render: formatearFecha },
     { title: "Finalización", dataIndex: "fecha_finalizacion", render: formatearFecha },
     { title: "Estado", dataIndex: "estado_tarea", render: (valor, tarea) => editable ? <Select value={valor} style={{ width: 150 }} disabled={ocupado}
       aria-label={`Estado de ${tarea.descripcion}`} options={["pendiente", "en_curso", "completada"].map((estado) => ({ value: estado,
-        label: <EstadoTag estado={estado} />, disabled: estado !== valor && !puedeCambiarTarea(tarea, estado, secuenciaCompleta) }))}
+        label: <EstadoTag estado={estado} /> }))}
       onChange={async (estado) => { const resultado = await ejecutar(() => cambiarEstadoTarea(tarea.id_tarea, estado)); if (resultado.ok) actualizar(); }} /> : <EstadoTag estado={valor} /> },
-    ...(solicitarCambio ? [{ title: "Acciones", key: "cambiar", render: (_, t) => <Button size="small" onClick={() => solicitarCambio(t)}>Cambiar estado</Button> }] : []),
     ...(editable && editar ? [{ title: "Acciones", key: "acciones", render: (_, t) => <Space><Button size="small" disabled={ocupado} onClick={() => editar(t)}>Editar</Button>
       {!t.id_tipo_tarea && <Popconfirm title="¿Eliminar tarea interna?" okText="Eliminar" cancelText="Volver" onConfirm={async () => {
         const respuesta = await ejecutar(() => eliminarTarea(t.id_tarea)); if (respuesta.ok) actualizar();
@@ -82,15 +84,11 @@ export default function TareasEvento({ id, editable }) {
       const grupo = tareas.filter((t) => t.id_servicio_x_evento === servicio && t.id_tipo_tarea).sort((a, b) => a.orden - b.orden);
       const visibles = filtrar(grupo);
       if (!visibles.length) return null;
-      // Sin `current`, antd marca siempre el paso 1 como el actual aunque ya
-      // este completo. El actual es el primero sin completar (o el ultimo si
-      // la secuencia termino).
-      const primeroAbierto = grupo.findIndex((t) => t.estado_tarea !== "completada");
-      const pasoActual = primeroAbierto === -1 ? grupo.length - 1 : primeroAbierto;
       return <Card key={servicio} title={`${grupo[0].nombre_servicio} · ${grupo[0].nombre_proveedor || "Sin proveedor"}`} style={{ marginBottom: 20 }}>
-        <Steps size="small" responsive current={pasoActual} style={{ marginBottom: 24 }} items={grupo.map((t) => ({ title: t.nombre_tipo_tarea || `Paso ${t.orden}`,
-          status: t.estado_tarea === "completada" ? "finish" : t.estado_tarea === "en_curso" ? "process" : "wait" }))} />
-        <TablaTareas tareas={visibles} secuenciaCompleta={grupo} editable={editable} editar={setEditor} actualizar={consulta.recargar} />
+        {/* Los pasos como referencia: ya no hay un "paso actual" que bloquee */}
+        <div className="pasos-referencia">{grupo.map((t) => <Tag key={t.id_tarea} color={t.estado_tarea === "completada" ? "green" : t.estado_tarea === "en_curso" ? "blue" : undefined}>
+          {t.nombre_tipo_tarea}</Tag>)}</div>
+        <TablaTareas tareas={visibles} editable={editable} editar={setEditor} actualizar={consulta.recargar} />
       </Card>;
     })}
     {!consulta.cargando && !consulta.error && <Card title="Tareas internas">
@@ -103,29 +101,13 @@ export default function TareasEvento({ id, editable }) {
 export function MisTareas() {
   const { usuario } = useSesion();
   const [estado, setEstado] = useState(null);
-  const [seleccion, setSeleccion] = useState(null);
   const consulta = useConsulta(useCallback(async () => (await misTareas(estado ? { estado_tarea: estado } : {})).data, [estado]));
   return <><EncabezadoPagina titulo="Mis tareas" />
     {!usuario.id_empleado && <Alert title="Tu cuenta no está vinculada a un empleado." type="info" className="aviso-formulario" />}
     <ErrorConsulta {...consulta} />
     <Card loading={consulta.cargando}><Select placeholder="Todos los estados" allowClear onChange={setEstado} style={{ width: 180, marginBottom: 20 }}
       options={["pendiente", "en_curso", "completada"].map((value) => ({ value, label: <EstadoTag estado={value} /> }))} />
-      <TablaTareas tareas={consulta.datos || []} mostrarEvento editable={false} solicitarCambio={setSeleccion} />
+      <TablaTareas tareas={consulta.datos || []} mostrarEvento editable actualizar={consulta.recargar} />
     </Card>
-    {seleccion && <CambioEstado tarea={seleccion} cerrar={() => setSeleccion(null)} actualizado={consulta.recargar} />}
   </>;
-}
-
-function CambioEstado({ tarea, cerrar, actualizado }) {
-  // Los pasos previos pueden pertenecer a otro empleado. Se consulta la secuencia
-  // completa antes de ofrecer estados, en lugar de inferirla de "Mis tareas".
-  const consulta = useConsulta(useCallback(async () => (await tareasEvento(tarea.id_evento)).data, [tarea.id_evento]));
-  const actual = consulta.datos?.find((t) => t.id_tarea === tarea.id_tarea);
-  return <Modal open title="Cambiar estado de tarea" footer={null} onCancel={cerrar} width={950}>
-    <ErrorConsulta {...consulta} />
-    {consulta.cargando && <Card loading />}
-    {actual && <TablaTareas tareas={[actual]} editable secuenciaCompleta={consulta.datos}
-      actualizar={() => { actualizado(); cerrar(); }} />}
-    {!consulta.cargando && !consulta.error && !actual && <Alert type="info" title="La tarea ya no está disponible." />}
-  </Modal>;
 }

@@ -14,7 +14,9 @@ export default function CierreEvento({ evento, actualizado }) {
   const pendientes = useConsulta(useCallback(async () => {
     const [tareas, servicios] = await Promise.all([tareasEvento(evento.id_evento), serviciosEvento(evento.id_evento)]);
     return { tareas: tareas.data.filter((t) => t.estado_tarea !== "completada").length,
-      servicios: servicios.data.filter((s) => !s.id_proveedor || !["confirmada", "en_seguimiento", "finalizada"].includes(s.estado_proveedor)).length };
+      // Misma definicion que la API (Fase 11): acordado y sin un proveedor
+      // confirmado o completado. Los cancelados no cuentan.
+      servicios: servicios.data.filter((s) => s.estado_servicio === "acordado" && (!s.id_proveedor || !["confirmado", "completado"].includes(s.estado_proveedor))).length };
   }, [evento.id_evento]));
   const abierto = evento.editable === true && ["confirmado", "en_preparacion"].includes(evento.estado);
   if (!abierto) return <Card><Result status={evento.estado === "realizado" ? "success" : "info"} title={evento.estado === "realizado" ? "Evento realizado" : "Evento cancelado"}

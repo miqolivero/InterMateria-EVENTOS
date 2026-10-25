@@ -48,7 +48,7 @@ Según `usuario.rol` del login hay **tres layouts**:
 | `superadmin` | `LayoutSuperadmin` | `/superadmin` | Resumen, Empresas |
 | `admin` | `LayoutPrincipal` | `/seguimiento` | Todo, más Mi empresa, Personal (con acceso) y Usuarios |
 | `coordinador` | `LayoutPrincipal` | `/seguimiento` | Toda la operación, sin Personal (ABM), Usuarios ni la edición de Mi empresa |
-| `empleado` | `LayoutEmpleado` | `/mis-tareas` | Mis tareas, Mi empresa (solo lectura) |
+| `empleado` | `LayoutEmpleado` | `/mis-tareas` | Mis tareas, Mis eventos (resumen de cada evento donde tiene tareas), Mi empresa (solo lectura) |
 
 - El menú se arma desde **una sola definición** de opciones con los roles
   permitidos para cada una. No hay listas de menú repetidas por rol.
@@ -60,6 +60,16 @@ Según `usuario.rol` del login hay **tres layouts**:
   cambio de contraseña antes de cualquier otra.
 - Si la API responde 403 de empresa suspendida, cerrar la sesión y mostrar el
   mensaje en el login.
+- **Fase 11:**
+  - Los cambios de un evento confirmado siempre se hacen desde un `Modal`
+    con **motivo obligatorio** y una lista para tildar las tareas afectadas.
+  - Lo que está "a revisar" se marca con un `Badge` o `Tag` naranja, igual en
+    todas las pantallas, con la acción "Marcar como revisado" (pide una nota).
+  - El historial de cambios del evento va en una pestaña "Cambios", con un
+    `Timeline`.
+  - Los indicadores son dos (`tareas X/Y` y `servicios X/Y`), más una `alerta`
+    visible. No mostrar un porcentaje único de avance.
+  - Los servicios cancelados se ven tachados o en gris, nunca desaparecen.
 - El rol `empleado` nunca muestra importes: la API no los manda, y el front no
   tiene que dejar columnas vacías de montos.
 

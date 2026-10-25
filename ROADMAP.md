@@ -63,6 +63,7 @@ Front ── [pantallas N contra el contrato] ─────── [prueba N co
 | 8 | Cierre y feedback | Cierre, cancelación y feedback | Pestaña Cierre |
 | 9 | Pulido y entrega | Revisión, seed de demo, docs de decisiones | Revisión, guion de demo |
 | 10 | Superadmin, roles y aislamiento | Superadmin, roles `admin`/`coordinador`/`empleado`, personal con acceso, panel del empleado, cierre de las fugas | 3 layouts por rol, panel de superadmin, Personal con acceso, Usuarios, panel del empleado |
+| 11 | Cambios y seguimiento real | Historial de cambios, compromisos a revisar, servicios después de confirmar, estados del proveedor, sin secuencia, resumen y consulta por estado | Modales de cambio con motivo, revisiones, pestaña Cambios, indicadores y alerta, resumen del evento, consulta por estado |
 
 **Primera demo:** fases 1 a 5, que cubren solicitud → presupuesto → evento.
 
@@ -569,6 +570,142 @@ falta resolver con varios eventos en paralelo.
       agrupan en `admin`, `coordinador` y `empleado`. Explicar cuál cubre a cuál.
 - [ ] Sumar al guion de la demo: el panel de superadmin, el alta de un
       empleado con acceso y su vista desde el celular.
+
+---
+
+## Fase 11 · Cambios del evento, compromisos a revisar y seguimiento real
+
+**Origen:** la segunda validación con el cliente (la IA del profesor).
+
+**Contrato:** sección "Fase 11" de `docs/API.md`. **Reglas:** 5, 11, 12 y 13 de `CLAUDE.md`.
+
+> **Criterio del cliente para toda la fase:** el sistema **registra** lo que
+> sucede y **muestra** qué quedó afectado, pero **no decide nada solo**. Si en
+> algún momento la implementación cambia algo automáticamente (reprogramar una
+> tarea, cancelar tareas de un servicio quitado, confirmar un proveedor), está
+> mal.
+
+### Backend · Miqueas
+
+1. **Base**
+   - Estados nuevos del proveedor, con migración de los datos existentes.
+   - Nuevas columnas `servicios_x_evento.estado_servicio` y
+     `eventos.cantidad_asistentes` (se copia de la solicitud al aceptar).
+   - Tablas nuevas `cambios_evento` y `afectados_cambio`, con sus CHECK e índices.
+   - Script `npm run db:actualizar` para una base con datos.
+   - Seed con los casos de la sección "Cambios en la base" del contrato.
+2. **Una sola definición de los indicadores** (función o vista SQL),
+   reutilizada en el resumen, el tablero y los listados.
+3. **Cambios con historial**, siempre en una transacción con su registro:
+   - `PUT /eventos/:id` con motivo;
+   - `POST /eventos/:id/servicios`;
+   - `PUT /servicios-evento/:id`;
+   - `PUT /servicios-evento/:id/proveedor`;
+   - `PATCH /servicios-evento/:id/cancelar`.
+4. **`PATCH /servicios-evento/:id/estado`**, que reemplaza al PATCH de la Fase 6
+   (borrar el viejo).
+5. **Revisiones:** `GET /eventos/:id/revisiones` y `PATCH /revisiones/:id`.
+6. **Tareas:**
+   - sacar la regla de secuencia y `puede_avanzar`;
+   - `generar-tareas` con los pasos elegidos;
+   - `a_revisar` en cada tarea.
+7. **`GET /eventos/:id/resumen`**, con el alcance del empleado (sin importes,
+   solo eventos donde tiene tareas).
+8. **Seguimiento:** indicadores en `proximos-eventos`, `pendientes_revision` en
+   el resumen, la definición nueva de "sin confirmar" y el nuevo
+   `GET /seguimiento/por-estado`.
+9. **Permisos** de los endpoints nuevos según la tabla de la Fase 11.
+10. **`docs/DECISIONES.md`:** "el sistema registra, no decide", "a revisar se
+    calcula", "los servicios se cancelan, no se borran" y "por qué se sacó la
+    secuencia obligatoria".
+
+**Listo cuando** (con curl):
+
+- [ ] Cambiar la fecha sin motivo → 400. Con motivo → queda el cambio con valor
+      anterior, valor nuevo, quién y cuándo, y **todos** los servicios
+      `acordado` quedan a revisar.
+- [ ] Cambiar solo las condiciones → se registra el cambio, pero **no** se
+      marca ningún servicio.
+- [ ] Cambiar un servicio → solo ese queda a revisar. Las tareas marcadas son
+      exactamente las de `tareas_afectadas`.
+- [ ] Revisar un afectado sin nota → 400. Con nota → queda quién y cuándo, y
+      revisarlo de nuevo → 409.
+- [ ] Reemplazar un proveedor rechazado → el historial muestra el anterior y el
+      nuevo, y el estado vuelve a `pendiente`.
+- [ ] Cancelar un servicio → sigue apareciendo, sale de los indicadores y sus
+      tareas **no** cambian.
+- [ ] Completar el paso 3 sin el 1 → 200 (ya no hay secuencia).
+- [ ] Un evento con todas las tareas completas y un servicio `pendiente` →
+      `alerta: true`.
+- [ ] `por-estado` separa `esperando_respuesta` de los eventos, y muestra
+      rechazadas y canceladas.
+- [ ] Empleado:
+  - [ ] ve el resumen de un evento donde tiene tareas, con las tareas de los
+        demás y sin importes;
+  - [ ] el resumen de otro evento → 404;
+  - [ ] el historial completo → 403.
+- [ ] Si falla el registro del cambio (forzar un error), la modificación tampoco
+      queda hecha.
+
+### Frontend · Compañero
+
+1. **Modal de cambio** (reutilizable) con un `motivo` obligatorio (`TextArea`) y
+   una lista para tildar las tareas afectadas (`Checkbox.Group` o `Table` con
+   `rowSelection`). Se usa en:
+   - editar el evento (fecha, sede, asistentes, condiciones);
+   - modificar un servicio;
+   - cambiar el proveedor;
+   - cancelar un servicio;
+   - agregar un servicio.
+2. **Pestaña Servicios** del evento:
+   - `Tag` del estado del proveedor (4 estados) y `Select` para el seguimiento
+     (sin motivo);
+   - acciones "Modificar", "Cambiar proveedor" (destacada si está `rechazado`)
+     y "Cancelar servicio";
+   - botón "Agregar servicio";
+   - los cancelados en gris o tachados, sin desaparecer.
+3. **"A revisar"**: un `Badge` naranja en servicios y tareas, y un bloque
+   "Pendientes de revisión" en el evento con la acción "Marcar como revisado"
+   (`Modal` con la nota obligatoria). También en el panel del empleado, para
+   las suyas.
+4. **Pestaña Cambios**: `Timeline` con fecha y hora, usuario, descripción,
+   antes → después y motivo, más un filtro por tipo.
+5. **Generar tareas**: elegir qué pasos crear (`Checkbox` por paso con su
+   `DatePicker`). Se sacan los `Steps` bloqueantes: si se muestran los pasos, es
+   solo como referencia.
+6. **Indicadores**:
+   - en el tablero y en el evento, reemplazar el `Progress` por dos
+     indicadores ("Tareas 5/8" y "Servicios confirmados 3/4");
+   - una `Alert` o `Tag` rojo "Atención" si `alerta` está en `true`, con el
+     motivo (servicios sin confirmar o pendientes de revisión).
+7. **Resumen del evento**: una pestaña o pantalla "Resumen" con todo en una vista
+   (`Descriptions`, indicadores, servicios, tareas, revisiones y últimos
+   cambios).
+   - El empleado llega desde "Mis eventos" o desde una tarea, sin columnas de
+     importes.
+8. **Consulta por estado**: pantalla "Eventos por estado" con `Segmented` (o
+   `Tabs`) y el conteo por situación. "Esperando respuesta del cliente" va
+   separado visualmente de los eventos, con un link a la solicitud o al
+   presupuesto.
+
+**Listo cuando:**
+
+- [ ] No se puede hacer ningún cambio de lo acordado sin motivo.
+- [ ] Se ve de un vistazo qué está a revisar, en el evento, el tablero y el
+      panel del empleado.
+- [ ] El tablero ya no muestra un porcentaje único.
+- [ ] El empleado no ve importes en ninguna pantalla nueva.
+- [ ] `build` y `lint` pasan.
+
+### Los dos
+
+- [ ] Recorrer el caso del cliente de punta a punta: el evento pasa del 15 al
+      22 de noviembre → se revisan los servicios y las tareas elegidas → un
+      proveedor rechaza → se reemplaza → se ve todo en el historial.
+- [ ] Actualizar el DER: las dos tablas nuevas, las columnas nuevas y los
+      estados del proveedor.
+- [ ] Actualizar el relevamiento con lo acordado en la segunda validación.
+- [ ] Sumar ese recorrido al guion de la demo.
 
 ---
 
