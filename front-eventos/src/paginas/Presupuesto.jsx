@@ -82,7 +82,7 @@ export default function Presupuesto() {
     <EncabezadoPagina titulo={`Presupuesto · versión ${p.numero_version}`} acciones={<EstadoTag estado={p.estado} />} />
     <Space wrap style={{ marginBottom: 20 }}>
       <Select aria-label="Versión de presupuesto" value={p.id_presupuesto} style={{ minWidth: 240 }}
-        options={(p.versiones || []).map((v) => ({ value: v.id_presupuesto, label: `Versión ${v.numero_version} · ${v.estado}` }))}
+        options={(p.versiones || []).map((v) => ({ value: v.id_presupuesto, label: <span>Versión {v.numero_version} <EstadoTag estado={v.estado} /></span> }))}
         onChange={(v) => { setRenglon(null); setAceptar(false); setCabecera(false); navigate(`/presupuestos/${v}`); }} />
       {editable && <Button onClick={() => { form.setFieldsValue({ validez_dias: p.validez_dias, observaciones: p.observaciones }); setCabecera(true); }}>Editar cabecera</Button>}
       {editable && solicitudAbierta && <Popconfirm title="¿Presentar presupuesto al cliente?" okText="Presentar" cancelText="Volver" onConfirm={() => transicion(() => presentarPresupuesto(id))}>

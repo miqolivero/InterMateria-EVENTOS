@@ -140,7 +140,7 @@ export default function Catalogo({ recurso, sinTitulo = false }) {
 }
 
 export function Catalogos() {
-  return <><EncabezadoPagina titulo="Catálogos" /><Tabs destroyOnHidden items={[
+  return <><EncabezadoPagina titulo="Catálogos" /><Tabs type="card" destroyOnHidden items={[
     { key: "tipos", label: "Tipos de evento", children: <Catalogo recurso="tipos" sinTitulo /> },
     { key: "servicios", label: "Servicios", children: <Catalogo recurso="servicios" sinTitulo /> },
     { key: "proveedores", label: "Proveedores", children: <Catalogo recurso="proveedores" sinTitulo /> }

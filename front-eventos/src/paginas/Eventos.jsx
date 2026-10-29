@@ -39,7 +39,7 @@ export default function Eventos() {
           options={(empleados.datos || []).map((e) => ({ value: e.id_empleado, label: nombreCompleto(e) }))} onChange={(v) => filtrar("id_coordinador", v)} />
         <DatePicker.RangePicker format="DD/MM/YYYY" onChange={(r) => setFiltros((v) => ({ ...v, desde: fechaAPI(r?.[0]), hasta: fechaAPI(r?.[1]) }))} />
       </Space></div>
-      <Tabs items={[{ key: "lista", label: "Listado", children: tabla }, { key: "calendario", label: "Calendario", children: <>
+      <Tabs type="card" items={[{ key: "lista", label: "Listado", children: tabla }, { key: "calendario", label: "Calendario", children: <>
         {consulta.cargando ? <Skeleton active /> : <Calendar cellRender={(fecha, info) => info.type === "date" ?
           <div>{(consulta.datos || []).filter((e) => e.fecha_evento_confirmada === fecha.format("YYYY-MM-DD")).map((e) => <div key={e.id_evento}><Link to={`/eventos/${e.id_evento}`}>{e.nombre_cliente}</Link></div>)}</div> : info.originNode} />}
       </> }]} />
@@ -87,7 +87,7 @@ export function EventoDetalle() {
         const respuesta = await ejecutar(() => iniciarPreparacion(id)); if (respuesta.ok) consulta.recargar();
       }}>Iniciar preparación</Button>}
     </Space>} />
-    <Tabs activeKey={pestana} onChange={setPestana} items={[
+    <Tabs type="card" activeKey={pestana} onChange={setPestana} items={[
       { key: "resumen", label: "Resumen", children: resumen },
       { key: "servicios", label: "Servicios", children: <ServiciosEvento id={id} editable={editable} actualizado={actualizar} /> },
       { key: "tareas", label: "Tareas", children: <TareasEvento key={version} id={id} editable={editable} /> },

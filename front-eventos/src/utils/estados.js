@@ -1,21 +1,24 @@
 // Proveedor y tarea tienen estados distintos, según el modelo compartido.
 // Los estados neutros van sin color: en antd 6 "default" no es un color
 // predefinido y el Tag quedaba sin fondo ni borde.
+// ayuda: la explicación que muestra el Tag al pasar el mouse, para los estados
+// que a simple vista se confunden (por ejemplo, un presupuesto reemplazado no
+// fue rechazado por el cliente: se aceptó otra versión).
 export const estados = {
   pendiente: { texto: "Pendiente", color: "gold" },
   presupuestada: { texto: "Presupuestada", color: "blue" },
   aceptada: { texto: "Aceptada", color: "green" },
   rechazada: { texto: "Rechazada", color: "red" },
   cancelada: { texto: "Cancelada" },
-  borrador: { texto: "Borrador" },
-  presentado: { texto: "Presentado", color: "blue" },
-  aceptado: { texto: "Aceptado", color: "green" },
-  rechazado: { texto: "Rechazado", color: "red" },
-  reemplazado: { texto: "Reemplazado" },
+  borrador: { texto: "Borrador", ayuda: "Todavía se puede editar. El cliente no lo vio." },
+  presentado: { texto: "Presentado", color: "blue", ayuda: "Se le envió al cliente y espera su respuesta." },
+  aceptado: { texto: "Aceptado", color: "green", ayuda: "El cliente lo aceptó: de esta versión nació el evento." },
+  rechazado: { texto: "Rechazado", color: "red", ayuda: "El cliente lo rechazó." },
+  reemplazado: { texto: "Reemplazado", ayuda: "No lo rechazó el cliente: quedó sin efecto porque se aceptó otra versión." },
   confirmado: { texto: "Confirmado", color: "cyan" },
   en_preparacion: { texto: "En preparación", color: "blue" },
   realizado: { texto: "Realizado", color: "green" },
-  cancelado: { texto: "Cancelado" },
+  cancelado: { texto: "Cancelado", ayuda: "Se canceló. Se conserva en el historial." },
   completado: { texto: "Completado", color: "green" },
   acordado: { texto: "Acordado", color: "green" },
   a_revisar: { texto: "A revisar", color: "orange" },

@@ -21,6 +21,11 @@ createRoot(document.getElementById('root')).render(
         motionDurationFast: '0.1s', motionDurationMid: '0.15s', motionDurationSlow: '0.2s'
       }, components: { Menu: {
         itemHeight: 40
+      }, Tabs: {
+        // Pestañas que se distinguen: la activa en azul y negrita sobre blanco,
+        // las demás en gris sobre un fondo apagado
+        titleFontSize: 15, itemColor: "#595959", itemSelectedColor: "#2563eb", itemHoverColor: "#1d4ed8",
+        inkBarColor: "#2563eb", cardBg: "#ececec", cardGutter: 4, horizontalItemPaddingLG: "12px 20px"
       } } }}>
         <AplicacionAntd>
           <SesionProvider><App /></SesionProvider>

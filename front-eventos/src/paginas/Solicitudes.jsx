@@ -71,8 +71,11 @@ export function SolicitudDetalle() {
       const respuesta = await ejecutar(() => crearPresupuesto(id), "Presupuesto creado.");
       if (respuesta.ok) navigate(`/presupuestos/${respuesta.datos.id_presupuesto}`);
     }}>Nuevo presupuesto</Button>}>
-      <Table rowKey="id_presupuesto" dataSource={solicitud.presupuestos || []} pagination={false} scroll={{ x: 550 }} columns={[
-        { title: "Versión", dataIndex: "numero_version" }, { title: "Fecha", dataIndex: "fecha_emision", render: formatearFecha },
+      {/* La versión aceptada se resalta y las que quedaron sin efecto se atenúan:
+          así se ve de un vistazo cuál vale. El Tag explica cada estado. */}
+      <Table rowKey="id_presupuesto" dataSource={solicitud.presupuestos || []} pagination={false} scroll={{ x: 550 }}
+        rowClassName={(p) => p.estado === "aceptado" ? "fila-destacada" : ["reemplazado", "rechazado"].includes(p.estado) ? "fila-historica" : ""} columns={[
+        { title: "Versión", dataIndex: "numero_version", render: (v, p) => p.estado === "aceptado" ? <strong>Versión {v} · la que vale</strong> : `Versión ${v}` }, { title: "Fecha", dataIndex: "fecha_emision", render: formatearFecha },
         { title: "Total", dataIndex: "importe_total", render: formatearMoneda },
         { title: "Estado", dataIndex: "estado", render: (v) => <EstadoTag estado={v} /> },
         { title: "", key: "ver", render: (_, p) => <Link to={`/presupuestos/${p.id_presupuesto}`}>Ver presupuesto</Link> }

@@ -18,3 +18,8 @@
 @keyframes entrada-suave { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
 @media (max-width: 767px) { .encabezado-pagina { flex-wrap: wrap; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; } }
+
+/* Versiones de un presupuesto: la aceptada resaltada, las que quedaron sin efecto atenuadas */
+.fila-destacada > td { background: #f0fdf4; }
+.fila-destacada > td:first-child { box-shadow: inset 3px 0 0 #16a34a; }
+.fila-historica > td { color: #8c8c8c; }
