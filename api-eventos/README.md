@@ -448,6 +448,12 @@ Los carga `seed.sql`. **La contraseña de todos es `admin123`.** Los marcados co
 La empresa 1 es la que tiene más datos cargados: es la que conviene usar para la
 demo.
 
+**Si alguien no puede entrar** (por ejemplo, el superadmin perdió su contraseña),
+se cambia desde el servidor:
+`npm run usuario:password -- <email> <contraseña nueva> [--temporal]`.
+Con `--temporal` el usuario la tiene que cambiar al entrar. A los usuarios de una
+empresa también se la resetea su admin (Usuarios) o el superadmin (Empresas).
+
 **Base ya instalada:** `npm run db:actualizar` aplica los cambios de las Fases 10
 y 11 sin borrar datos (los `usuario` pasan a `coordinador`, los estados del
 proveedor pasan a los 4 nuevos y la cantidad de asistentes se copia de la

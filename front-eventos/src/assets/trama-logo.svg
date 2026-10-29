@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 250 64" role="img" aria-label="Trama">
+  <rect x="4" y="10" width="56" height="14" rx="7" fill="#E8A33D"/>
+  <path d="M25 27 H39 V49 A7 7 0 0 1 25 49 Z" fill="#0F8B8D"/>
+  <text x="72" y="50" font-family="Sora, 'Segoe UI', Arial, sans-serif" font-size="46" font-weight="700" letter-spacing="-1.4" fill="#172033">Trama</text>
+</svg>

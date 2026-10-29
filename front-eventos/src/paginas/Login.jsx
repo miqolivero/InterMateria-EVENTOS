@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { useNavigate, useLocation, Navigate } from "react-router-dom";
-import { Alert, Button, Form, Input, Typography } from "antd";
+import { Alert, Button, Form, Input, Modal, Typography } from "antd";
 import { ArrowRightOutlined, LockOutlined, MailOutlined } from "@ant-design/icons";
 import { leerAvisoSesion, login } from "../servicios/authService";
 import { useSesion } from "../contexto/useSesion";
-import { mensajeError } from "../utils/errores";
+import { mensajeLogin } from "../utils/errores";
 import { inicioDeRol, puedeEntrar } from "../utils/menu";
 import MarcoAcceso from "../componentes/MarcoAcceso";
 
@@ -13,6 +13,7 @@ function Login() {
   // Motivo de un cierre de sesión forzado (por ejemplo, la empresa fue suspendida)
   const [aviso] = useState(leerAvisoSesion);
   const [enviando, setEnviando] = useState(false);
+  const [ayuda, setAyuda] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
   const { usuario, iniciarSesion } = useSesion();
@@ -32,7 +33,7 @@ function Login() {
       const valida = typeof desde === "string" && desde.startsWith("/") && !desde.startsWith("//") && puedeEntrar(rol, desde.split(/[?#]/)[0]);
       navigate(valida ? desde : inicioDeRol(rol), { replace: true });
     } catch (err) {
-      setError(mensajeError(err, "No se pudo iniciar sesión."));
+      setError(mensajeLogin(err));
     } finally {
       setEnviando(false);
     }
@@ -52,7 +53,18 @@ function Login() {
       </Form.Item>
       <Button type="primary" htmlType="submit" block loading={enviando} icon={<ArrowRightOutlined />} iconPlacement="end">Ingresar</Button>
     </Form>
+    <p className="acceso-enlace"><Button type="link" size="small" onClick={() => setAyuda(true)}>¿Olvidaste tu contraseña?</Button></p>
     <p className="acceso-enlace">¿No tenés cuenta? Pedísela al administrador de tu empresa.</p>
+    {/* No hay recuperación por email: la contraseña la resetea alguien con
+        permiso, y quien la recibe la tiene que cambiar al entrar */}
+    <Modal open={ayuda} title="¿Olvidaste tu contraseña?" onCancel={() => setAyuda(false)} footer={<Button onClick={() => setAyuda(false)}>Entendido</Button>}>
+      <Typography.Paragraph>Por seguridad, la contraseña no se recupera por email. La resetea alguien con permiso y te da una temporal, que vas a tener que cambiar al entrar:</Typography.Paragraph>
+      <ul className="ayuda-password">
+        <li><strong>Empleados y coordinadores:</strong> el administrador de tu empresa, desde Usuarios → Resetear contraseña.</li>
+        <li><strong>Administradores de una empresa:</strong> el soporte del sistema, desde el panel de Empresas.</li>
+        <li><strong>Soporte del sistema:</strong> desde el servidor, con <code>npm run usuario:password</code> (ver el README de la API).</li>
+      </ul>
+    </Modal>
   </MarcoAcceso>;
 }
 

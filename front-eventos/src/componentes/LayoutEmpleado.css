@@ -5,3 +5,6 @@
 .navegacion-empleado { background: #fff; border-bottom: 1px solid #e5e5e5; position: sticky; top: 0; z-index: 10; }
 .menu-empleado { max-width: 760px; margin: 0 auto; border-bottom: none; justify-content: center; }
 .contenido-empleado { width: 100%; max-width: 760px; margin: 0 auto; padding: 20px 16px 40px; }
+
+.isotipo-empleado { width: 24px; height: 24px; flex-shrink: 0; }
+.firma-empleado { padding: 16px; }
