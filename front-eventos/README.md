@@ -34,12 +34,8 @@ permisos los aplica la API.
 | Rol | Layout | Inicio | Pantallas |
 | --- | --- | --- | --- |
 | `superadmin` | `LayoutSuperadmin` | `/superadmin` | Resumen (métricas), Empresas (`/superadmin/empresas`: tabla con métricas, búsqueda, filtro, suspender y alta en dos pasos) y detalle (`/superadmin/empresas/:id`: datos, métricas y soporte de usuarios) |
-| `admin` | `LayoutPrincipal` | `/tareas` | (admin y coordinador) Todas las tareas de la empresa, con filtro por evento, responsable y estado |
-| `/p/:token` | Sin login: el presupuesto que ve el cliente con su link, sin costos ni proveedores. Puede aceptarlo o rechazarlo; la empresa confirma |
-| `/seguimiento` | Toda la operación, más Personal (con acceso), Usuarios y Mi empresa editable |
-| `coordinador` | `LayoutPrincipal` | `/tareas` | (admin y coordinador) Todas las tareas de la empresa, con filtro por evento, responsable y estado |
-| `/p/:token` | Sin login: el presupuesto que ve el cliente con su link, sin costos ni proveedores. Puede aceptarlo o rechazarlo; la empresa confirma |
-| `/seguimiento` | Toda la operación y Mi empresa en solo lectura |
+| `admin` | `LayoutPrincipal` | `/seguimiento` | Toda la operación, más Personal (con acceso), Usuarios y Mi empresa editable |
+| `coordinador` | `LayoutPrincipal` | `/seguimiento` | Toda la operación y Mi empresa en solo lectura |
 | `empleado` | `LayoutEmpleado` | `/mis-tareas` | Mis tareas (su panel para el celular), Mis eventos (el contexto completo, sin importes) y Mi empresa en solo lectura |
 
 | Ruta | Funcionalidad |

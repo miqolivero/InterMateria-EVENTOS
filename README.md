@@ -26,9 +26,9 @@ Con la instalación completada, abrir dos terminales desde la raíz:
 | Backend | `api-eventos` | `npm run dev` | `http://localhost:3000/api` |
 | Frontend | `front-eventos` | `npm run dev` | `http://localhost:5173` |
 
-Solo login y registro son públicos en la interfaz. La API valida el token y
-los permisos en cada operación protegida. La lista pública de empresas permite
-seleccionar una empresa activa durante el registro.
+Solo el login y el link del presupuesto para el cliente son públicos en la
+interfaz. La API valida el token y los permisos en cada operación protegida. No
+hay registro público: las cuentas las crea el superadmin o el admin de la empresa.
 
 ## Documentación
 
