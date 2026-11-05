@@ -8,6 +8,7 @@ import {
   obtenerServiciosDelProveedor,
   reemplazarServiciosDelProveedor
 } from "../controllers/proveedores.controller.js";
+import { datosProveedor } from "../middlewares/datos.middleware.js";
 import { validarParamId } from "../middlewares/validarId.middleware.js";
 
 const router = Router();
@@ -25,8 +26,8 @@ router.get("/:id/servicios", obtenerServiciosDelProveedor);
 router.put("/:id/servicios", reemplazarServiciosDelProveedor);
 
 router.get("/:id", obtenerProveedorPorId);
-router.post("/", crearProveedor);
-router.put("/:id", editarProveedor);
+router.post("/", datosProveedor, crearProveedor);
+router.put("/:id", datosProveedor, editarProveedor);
 router.patch("/:id/activo", cambiarActivoProveedor);
 
 export default router;

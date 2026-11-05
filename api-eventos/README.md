@@ -406,6 +406,24 @@ lectura, siempre sobre los eventos **abiertos** de la empresa.
 El contrato completo, con el JSON de cada respuesta y los mensajes de error
 exactos, está en `docs/API.md`.
 
+### Sedes, link del presupuesto y tareas de la empresa
+
+- `/api/sedes`: catálogo de salones. Solicitudes y eventos eligen `id_sede`.
+- `/api/publico/presupuestos/:token`: lo que ve el cliente, sin login y sin costos.
+- `GET /api/tareas`: todas las tareas de la empresa, con filtros por evento,
+  responsable y estado.
+
+Detalle en `docs/API.md` y decisiones 18 a 20 de `docs/DECISIONES.md`.
+
+### Validación de datos
+
+`src/middlewares/datos.middleware.js` limpia y valida los datos antes de cada
+controlador, y los índices únicos `uq_*` de la base impiden los repetidos aunque
+lleguen dos pedidos a la vez. Qué se considera repetido y por qué está en la
+decisión 18 de `docs/DECISIONES.md`. En una base ya instalada los crea
+`npm run db:actualizar`: si ya hay datos repetidos, el comando falla sin cambiar
+nada y el error indica cuál corregir.
+
 ### Códigos de error
 
 | Código | Cuándo |

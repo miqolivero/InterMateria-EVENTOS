@@ -36,7 +36,7 @@ const api = crearHTTP(async (req, res) => {
   const ruta = new URL(req.url, "http://localhost").pathname.replace(/^\/api/, "");
   if (ruta === "/auth/login" && req.method === "POST") { res.end(JSON.stringify({ token: "token-ficticio-de-verificacion", usuario })); return; }
   if (req.method !== "GET") { res.writeHead(501); res.end(JSON.stringify({ mensaje: "Vista de prueba: las escrituras están deshabilitadas" })); return; }
-  const recursos = { "/clientes": [cliente], "/tipos-eventos": [tipo], "/servicios": [servicio], "/proveedores": [proveedor], "/empleados": [empleado] };
+  const recursos = { "/sedes": [{ id_sede: 1, nombre: "Salón de prueba", direccion: "Dirección de prueba", activo: true }], "/clientes": [cliente], "/tipos-eventos": [tipo], "/servicios": [servicio], "/proveedores": [proveedor], "/empleados": [empleado] };
   const respuestas = {
     ...recursos, "/auth/perfil": usuario,
     "/mi-empresa": { id_empresa: 1, nombre: "Empresa de prueba", cuit: "30-11111111-1", email: null, telefono: null, direccion: null, fecha_creacion: "2026-10-01T12:00:00.000Z" },
@@ -62,7 +62,7 @@ const api = crearHTTP(async (req, res) => {
   };
   let respuesta = respuestas[ruta];
   if (respuesta === undefined) {
-    const match = ruta.match(/^\/(clientes|tipos-eventos|servicios|proveedores|empleados)\/1$/);
+    const match = ruta.match(/^\/(clientes|tipos-eventos|servicios|sedes|proveedores|empleados)\/1$/);
     if (match) respuesta = recursos[`/${match[1]}`][0];
   }
   if (respuesta === undefined) { res.writeHead(404); respuesta = { mensaje: "Ruta de prueba no disponible" }; }

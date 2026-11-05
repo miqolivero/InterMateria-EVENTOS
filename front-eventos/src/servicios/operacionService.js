@@ -34,6 +34,7 @@ export const editarTarea = (id, datos) => api.put(`/tareas/${id}`, datos);
 export const cambiarEstadoTarea = (id, estado_tarea) => api.patch(`/tareas/${id}/estado`, { estado_tarea });
 export const eliminarTarea = (id) => api.delete(`/tareas/${id}`);
 export const misTareas = (params) => api.get("/tareas/mias", { params });
+export const todasLasTareas = (params) => api.get("/tareas", { params });
 export const cerrarEvento = (id, datos) => api.patch(`/eventos/${id}/cerrar`, datos);
 export const guardarFeedback = (id, datos) => api.patch(`/eventos/${id}/feedback`, datos);
 export const resumenSeguimiento = (dias) => api.get("/seguimiento/resumen", { params: { dias } });
@@ -43,5 +44,6 @@ export const serviciosSinConfirmar = (dias) => api.get("/seguimiento/servicios-s
 export const resumenEvento = (id) => api.get(`/eventos/${id}/resumen`);
 export const cambiosEvento = (id, params) => api.get(`/eventos/${id}/cambios`, { params });
 export const revisionesEvento = (id, params) => api.get(`/eventos/${id}/revisiones`, { params });
-export const marcarRevisado = (id, nota_revision) => api.patch(`/revisiones/${id}`, { nota_revision });
+export const marcarRevisado = (id, nota_revision, cambios = {}) => api.patch(`/revisiones/${id}`, { nota_revision, ...cambios });
+export const historialTarea = (id) => api.get(`/tareas/${id}/historial`);
 export const eventosPorEstado = (params) => api.get("/seguimiento/por-estado", { params });

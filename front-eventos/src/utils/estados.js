@@ -10,8 +10,8 @@ export const estados = {
   aceptada: { texto: "Aceptada", color: "green" },
   rechazada: { texto: "Rechazada", color: "red" },
   cancelada: { texto: "Cancelada" },
-  borrador: { texto: "Borrador", ayuda: "Todavía se puede editar. El cliente no lo vio." },
-  presentado: { texto: "Presentado", color: "blue", ayuda: "Se le envió al cliente y espera su respuesta." },
+  borrador: { texto: "Borrador", ayuda: "Todavía se puede editar. Falta presentarlo al cliente." },
+  presentado: { texto: "Presentado", color: "blue", ayuda: "Ya se presentó al cliente y espera su respuesta. Ya no se puede editar." },
   aceptado: { texto: "Aceptado", color: "green", ayuda: "El cliente lo aceptó: de esta versión nació el evento." },
   rechazado: { texto: "Rechazado", color: "red", ayuda: "El cliente lo rechazó." },
   reemplazado: { texto: "Reemplazado", ayuda: "No lo rechazó el cliente: quedó sin efecto porque se aceptó otra versión." },
@@ -27,8 +27,15 @@ export const estados = {
   solicitud_cancelada: { texto: "Solicitud cancelada" },
   en_curso: { texto: "En curso", color: "blue" },
   completada: { texto: "Completada", color: "green" },
-  vencida: { texto: "Vencida", color: "red" }
+  vencida: { texto: "Vencida", color: "red" },
+  sin_completar: { texto: "Sin completar", color: "gold" },
+  sin_realizar: { texto: "No realizada", ayuda: "El evento ya pasó y la tarea no se completó. Ya no se puede modificar." }
 };
+
+// Las opciones del filtro de estado de las tareas
+export const opcionesEstadoTarea = ({ conVencida = false } = {}) => [
+  ...(conVencida ? ["sin_completar"] : []), ...["pendiente", "en_curso", "completada"], ...(conVencida ? ["vencida"] : []), "sin_realizar"
+].map((value) => ({ value, label: estados[value].texto }));
 
 // Fase 11: los 4 estados del proveedor. pendiente, confirmado y rechazado
 // comparten texto y color con los de otras entidades; completado es nuevo.

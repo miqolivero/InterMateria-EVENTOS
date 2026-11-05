@@ -6,6 +6,9 @@ import { activarEmpresa, crearEmpresa, listarEmpresas } from "../../servicios/su
 import { useConsulta } from "../../contexto/useConsulta.js";
 import { useAccion } from "../../contexto/useAccion.js";
 import { formatearFecha } from "../../utils/formato.js";
+import { ordenFecha } from "../../utils/tablas.js";
+import { useFiltros } from "../../contexto/useFiltros.js";
+import LimpiarFiltros from "../../componentes/LimpiarFiltros";
 import EncabezadoPagina from "../../componentes/EncabezadoPagina";
 import ErrorConsulta from "../../componentes/ErrorConsulta";
 import CamposEmpresa from "../../componentes/CamposEmpresa";
@@ -56,8 +59,7 @@ function AltaEmpresa({ cerrar, creada }) {
 
 // Empresas del sistema, con sus métricas. Nunca sus datos operativos.
 export default function EmpresasSistema() {
-  const [buscar, setBuscar] = useState("");
-  const [activo, setActivo] = useState("todas");
+  const { filtros: { buscar, activo }, filtrar, limpiar, hayFiltros, clave } = useFiltros({ activo: "todas" }, { activo: "todas" });
   const [alta, setAlta] = useState(false);
   const navigate = useNavigate();
   const { ocupado, ejecutar } = useAccion();
@@ -74,7 +76,7 @@ export default function EmpresasSistema() {
     numero("clientes", "Clientes"),
     numero("eventos_abiertos", "Eventos abiertos"),
     numero("eventos_realizados", "Realizados"),
-    { title: "Último evento", dataIndex: "ultimo_evento_creado", render: formatearFecha },
+    { title: "Último evento", dataIndex: "ultimo_evento_creado", render: formatearFecha, ...ordenFecha("ultimo_evento_creado") },
     { title: "Acciones", key: "acciones", render: (_, e) => <Space wrap>
       <Button size="small" onClick={() => navigate(`/superadmin/empresas/${e.id_empresa}`)}>Ver</Button>
       <Popconfirm title={e.activo ? `¿Suspender ${e.nombre}? Sus usuarios no van a poder entrar.` : `¿Reactivar ${e.nombre}?`}
@@ -88,10 +90,11 @@ export default function EmpresasSistema() {
     <EncabezadoPagina titulo="Empresas" descripcion="Las organizadoras que usan el sistema y sus métricas."
       acciones={<Button type="primary" icon={<PlusOutlined />} onClick={() => setAlta(true)}>Nueva empresa</Button>} />
     <ErrorConsulta {...consulta} />
-    <Card><div className="barra-tabla">
-      <Input.Search placeholder="Buscar por nombre o CUIT" allowClear onSearch={setBuscar} style={{ maxWidth: 320 }} aria-label="Buscar empresas" />
-      <Space wrap><Select aria-label="Estado" value={activo} onChange={setActivo} style={{ minWidth: 150 }}
+    <Card><div className="barra-tabla" key={clave}>
+      <Input.Search placeholder="Buscar por nombre o CUIT" allowClear onSearch={(v) => filtrar("buscar", v)} style={{ maxWidth: 320 }} aria-label="Buscar empresas" />
+      <Space wrap><Select aria-label="Estado" value={activo} onChange={(v) => filtrar("activo", v)} style={{ minWidth: 150 }}
         options={[{ value: "todas", label: "Todas" }, { value: "true", label: "Activas" }, { value: "false", label: "Suspendidas" }]} />
+        <LimpiarFiltros activo={hayFiltros} alTocar={limpiar} />
         <Button icon={<ReloadOutlined />} aria-label="Actualizar" onClick={consulta.recargar} loading={consulta.cargando} /></Space>
     </div>
     <Table rowKey="id_empresa" loading={consulta.cargando} dataSource={consulta.datos || []} columns={columnas} scroll={{ x: 1000 }}

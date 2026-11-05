@@ -12,6 +12,7 @@
 -- poder recrear la base de desarrollo las veces que haga falta.
 -- =============================================================================
 
+DROP TABLE IF EXISTS cambios_estado_tarea CASCADE;
 DROP TABLE IF EXISTS afectados_cambio CASCADE;
 DROP TABLE IF EXISTS cambios_evento CASCADE;
 DROP TABLE IF EXISTS tareas CASCADE;
@@ -21,6 +22,7 @@ DROP TABLE IF EXISTS eventos CASCADE;
 DROP TABLE IF EXISTS detalle_presupuesto CASCADE;
 DROP TABLE IF EXISTS presupuestos CASCADE;
 DROP TABLE IF EXISTS solicitudes CASCADE;
+DROP TABLE IF EXISTS sedes CASCADE;
 DROP TABLE IF EXISTS proveedores_x_servicio CASCADE;
 DROP TABLE IF EXISTS proveedores CASCADE;
 DROP TABLE IF EXISTS servicios CASCADE;
@@ -196,6 +198,21 @@ CREATE TABLE proveedores_x_servicio (
 CREATE INDEX idx_prov_x_serv_servicio ON proveedores_x_servicio(id_servicio);
 
 -- =============================================================================
+-- 9 bis. Sedes (los salones donde se hacen los eventos, catalogo por empresa)
+-- =============================================================================
+-- Una solicitud o un evento eligen una sede de esta lista. Un salon no se puede
+-- ocupar dos veces el mismo dia: lo garantiza uq_eventos_sede_dia.
+CREATE TABLE sedes (
+    id_sede SERIAL PRIMARY KEY,
+    id_empresa INTEGER NOT NULL REFERENCES empresas(id_empresa),
+    nombre VARCHAR(200) NOT NULL,
+    direccion VARCHAR(200),
+    activo BOOLEAN NOT NULL DEFAULT TRUE
+);
+
+CREATE INDEX idx_sedes_empresa ON sedes(id_empresa);
+
+-- =============================================================================
 -- 10. Solicitudes (el pedido inicial del cliente)
 -- =============================================================================
 CREATE TABLE solicitudes (
@@ -206,6 +223,8 @@ CREATE TABLE solicitudes (
     fecha_solicitud DATE NOT NULL DEFAULT CURRENT_DATE,
     fecha_evento_prevista DATE NOT NULL,
     cantidad_asistentes INTEGER NOT NULL CHECK (cantidad_asistentes > 0),
+    -- id_sede es la sede elegida; sede_prevista, una copia de su nombre
+    id_sede INTEGER REFERENCES sedes(id_sede),
     sede_prevista VARCHAR(200),
     preferencias TEXT,
     estado VARCHAR(20) NOT NULL DEFAULT 'pendiente'
@@ -233,6 +252,12 @@ CREATE TABLE presupuestos (
     estado VARCHAR(20) NOT NULL DEFAULT 'borrador'
         CHECK (estado IN ('borrador', 'presentado', 'aceptado',
                           'rechazado', 'reemplazado')),
+    -- El link que ve el cliente (aleatorio: no se puede adivinar) y su respuesta.
+    -- La respuesta se registra, pero la decision final es de la empresa.
+    token_publico UUID NOT NULL DEFAULT gen_random_uuid() UNIQUE,
+    respuesta_cliente VARCHAR(20) CHECK (respuesta_cliente IN ('aceptado', 'rechazado')),
+    fecha_respuesta_cliente TIMESTAMP,
+    comentario_cliente TEXT,
     UNIQUE (id_solicitud, numero_version)
 );
 
@@ -270,6 +295,8 @@ CREATE TABLE eventos (
         REFERENCES presupuestos(id_presupuesto),
     id_empleado_coordinador INTEGER REFERENCES empleados(id_empleado),
     fecha_evento_confirmada DATE NOT NULL,
+    -- id_sede es la sede elegida; sede_acordada, el nombre que tenia al acordarla
+    id_sede INTEGER REFERENCES sedes(id_sede),
     sede_acordada VARCHAR(200),
     condiciones_acordadas TEXT,
     -- La cantidad confirmada (Fase 11). Se copia de la solicitud al aceptar y
@@ -348,6 +375,8 @@ CREATE TABLE tareas (
     descripcion VARCHAR(300) NOT NULL,
     fecha_prevista DATE,
     fecha_finalizacion DATE,
+    -- La primera vez que se termino: no se borra si la tarea se reabre
+    fecha_primera_finalizacion DATE,
     estado_tarea VARCHAR(20) NOT NULL DEFAULT 'pendiente'
         CHECK (estado_tarea IN ('pendiente', 'en_curso', 'completada')),
     observaciones TEXT
@@ -408,6 +437,8 @@ CREATE TABLE afectados_cambio (
     id_usuario_revision INTEGER REFERENCES usuarios(id_usuario),
     fecha_revision TIMESTAMP,
     nota_revision TEXT,
+    -- Lo que se actualizo al revisar, en palabras. NULL si solo se dejo la nota
+    cambios_revision TEXT,
     -- Exactamente uno de los dos: un servicio o una tarea
     CONSTRAINT chk_afectado_uno CHECK ((id_servicio_x_evento IS NULL) <> (id_tarea IS NULL)),
     -- Si esta revisado, se sabe quien y cuando
@@ -419,3 +450,59 @@ CREATE INDEX idx_afectados_cambio ON afectados_cambio(id_cambio);
 CREATE INDEX idx_afectados_servicio ON afectados_cambio(id_servicio_x_evento);
 CREATE INDEX idx_afectados_tarea ON afectados_cambio(id_tarea);
 CREATE INDEX idx_afectados_usuario ON afectados_cambio(id_usuario_revision);
+
+-- =============================================================================
+-- 19. Historial de estados de las tareas
+-- =============================================================================
+-- Una fila por cada cambio de estado: el recorrido de la tarea, quien y cuando.
+CREATE TABLE cambios_estado_tarea (
+    id_cambio_estado SERIAL PRIMARY KEY,
+    id_tarea INTEGER NOT NULL REFERENCES tareas(id_tarea),
+    estado_anterior VARCHAR(20) NOT NULL,
+    estado_nuevo VARCHAR(20) NOT NULL,
+    id_usuario INTEGER NOT NULL REFERENCES usuarios(id_usuario),
+    fecha_hora TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_cambios_estado_tarea ON cambios_estado_tarea(id_tarea);
+CREATE INDEX idx_cambios_estado_usuario ON cambios_estado_tarea(id_usuario);
+
+-- =============================================================================
+-- 20. Datos que no se pueden repetir
+-- =============================================================================
+-- Los chequeos previos de la API dan un mensaje claro, pero no aguantan dos
+-- pedidos simultaneos ni variantes ("38.123.456" y "38123456", " catering").
+-- Estos indices son la garantia final. Comparan el dato normalizado.
+CREATE UNIQUE INDEX uq_clientes_documento ON clientes (id_empresa, regexp_replace(dni_cuit, '\D', '', 'g'))
+    WHERE dni_cuit IS NOT NULL;
+CREATE UNIQUE INDEX uq_proveedores_cuit ON proveedores (id_empresa, regexp_replace(cuit, '\D', '', 'g'))
+    WHERE cuit IS NOT NULL;
+CREATE UNIQUE INDEX uq_proveedores_razon_social ON proveedores (id_empresa, lower(btrim(razon_social)));
+CREATE UNIQUE INDEX uq_servicios_nombre ON servicios (id_empresa, lower(btrim(nombre)));
+CREATE UNIQUE INDEX uq_tipos_eventos_nombre ON tipos_eventos (id_empresa, lower(btrim(nombre)));
+CREATE UNIQUE INDEX uq_empleados_legajo ON empleados (lower(btrim(legajo)));
+CREATE UNIQUE INDEX uq_usuarios_email ON usuarios (lower(email));
+CREATE UNIQUE INDEX uq_empresas_cuit ON empresas (regexp_replace(cuit, '\D', '', 'g'));
+CREATE UNIQUE INDEX uq_empresas_nombre ON empresas (lower(btrim(nombre)));
+-- El mismo pedido dos veces. Una solicitud cancelada o rechazada no cuenta: el
+-- cliente puede volver a pedir lo mismo.
+CREATE UNIQUE INDEX uq_solicitudes_abiertas ON solicitudes (id_cliente, id_tipo_evento, fecha_evento_prevista)
+    WHERE estado IN ('pendiente', 'presupuestada', 'aceptada');
+-- Un renglon identico. El mismo servicio con otra descripcion o proveedor si
+-- se puede: dos equipos de sonido son dos renglones.
+CREATE UNIQUE INDEX uq_detalle_renglon ON detalle_presupuesto
+    (id_presupuesto, id_servicio, COALESCE(id_proveedor, 0), lower(btrim(COALESCE(descripcion, ''))));
+CREATE UNIQUE INDEX uq_servicio_evento_acordado ON servicios_x_evento
+    (id_evento, id_servicio, COALESCE(id_proveedor, 0), lower(btrim(COALESCE(descripcion, ''))))
+    WHERE estado_servicio = 'acordado';
+-- La misma tarea libre cargada dos veces (por ejemplo, un doble clic)
+CREATE UNIQUE INDEX uq_tareas_libres ON tareas
+    (id_evento, lower(btrim(descripcion)), fecha_prevista, id_empleado_responsable)
+    WHERE id_tipo_tarea IS NULL;
+-- Un salon no se ocupa dos veces el mismo dia: despues de un evento hay limpieza
+-- y hay que preparar el siguiente. Solo para eventos abiertos: si se cancela, el
+-- salon queda libre.
+CREATE UNIQUE INDEX uq_eventos_sede_dia ON eventos (id_sede, fecha_evento_confirmada)
+    WHERE estado IN ('confirmado', 'en_preparacion') AND id_sede IS NOT NULL;
+-- La misma sede cargada dos veces, sin importar mayusculas, tildes ni espacios
+CREATE UNIQUE INDEX uq_sedes_nombre ON sedes (id_empresa, regexp_replace(translate(lower(btrim(nombre)), 'áéíóúü', 'aeiouu'), '\s+', ' ', 'g'));

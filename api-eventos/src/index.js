@@ -17,6 +17,8 @@ import serviciosEventoRoutes from "./routes/serviciosEvento.routes.js";
 import tareasRoutes from "./routes/tareas.routes.js";
 import seguimientoRoutes from "./routes/seguimiento.routes.js";
 import revisionesRoutes from "./routes/revisiones.routes.js";
+import sedesRoutes from "./routes/sedes.routes.js";
+import publicoRoutes from "./routes/publico.routes.js";
 import {
   verificarToken,
   soloEmpresa,
@@ -48,6 +50,9 @@ const operacion = [...empresa, permitirRoles(ADMIN, COORDINADOR)];
 // POST /auth/register y /api/empresas ya no existen: responden el 404 de abajo.
 app.use("/api/auth", authRoutes);
 
+// Sin login: el presupuesto que ve el cliente con su link. Solo eso.
+app.use("/api/publico", publicoRoutes);
+
 // Panel de superadmin
 app.use("/api/superadmin", verificarToken, soloSuperadmin, superadminRoutes);
 
@@ -60,6 +65,7 @@ app.use("/api/usuarios", ...empresa, permitirRoles(ADMIN), usuariosRoutes);
 app.use("/api/clientes", ...operacion, clientesRoutes);
 app.use("/api/tipos-eventos", ...operacion, tiposEventosRoutes);
 app.use("/api/servicios", ...operacion, serviciosRoutes);
+app.use("/api/sedes", ...operacion, sedesRoutes);
 app.use("/api/proveedores", ...operacion, proveedoresRoutes);
 app.use("/api/empleados", ...operacion, empleadosRoutes);
 
@@ -74,8 +80,8 @@ app.use("/api/seguimiento", ...operacion, seguimientoRoutes);
 // controller lo limita a SUS registros:
 //   - eventos: solo el resumen y las revisiones (Fase 11);
 //   - servicios-evento: solo el estado del proveedor;
-//   - tareas: "mis tareas" y el cambio de estado;
-//   - revisiones: dejar constancia de lo que reviso.
+//   - tareas: "mis tareas", el cambio de estado y su historial;
+//   - revisiones: dejar constancia de lo que reviso y actualizar estados.
 app.use("/api/eventos", ...empresa, permitirRoles(ADMIN, COORDINADOR, EMPLEADO), eventosRoutes);
 app.use("/api/servicios-evento", ...empresa, permitirRoles(ADMIN, COORDINADOR, EMPLEADO), serviciosEventoRoutes);
 app.use("/api/tareas", ...empresa, permitirRoles(ADMIN, COORDINADOR, EMPLEADO), tareasRoutes);

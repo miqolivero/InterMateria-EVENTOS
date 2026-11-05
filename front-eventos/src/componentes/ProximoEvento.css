@@ -1,0 +1,15 @@
+/* El color avisa cuánto falta: hasta 7 días, rojo; hasta 30, ámbar; más, azul */
+.urgencia-alta { --urgencia: #dc2626; --urgencia-fondo: #fef2f2; }
+.urgencia-media { --urgencia: #b7791f; --urgencia-fondo: #fdf3e1; }
+.urgencia-baja { --urgencia: #2563eb; --urgencia-fondo: #eff6ff; }
+
+.proximo-evento { margin-bottom: 16px; border-left: 4px solid var(--urgencia, #d9d9d9); }
+.proximo-contenido { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; }
+.proximo-cuenta { display: flex; flex-direction: column; gap: 2px; min-width: 170px; padding: 12px 18px; border-radius: 8px; background: var(--urgencia-fondo); }
+.proximo-etiqueta { font-size: 12px; color: #595959; }
+.proximo-dias { font-size: 24px; font-weight: 600; line-height: 1.2; color: var(--urgencia); white-space: nowrap; }
+.proximo-datos { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 240px; }
+.proximo-titulo { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; }
+.proximo-titulo a { font-size: 17px; font-weight: 600; }
+.proximo-detalle { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 13px; color: #595959; }
+.proximo-vacio { color: #595959; }

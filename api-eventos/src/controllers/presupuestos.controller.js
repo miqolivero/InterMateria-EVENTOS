@@ -67,12 +67,15 @@ const SELECT_PRESUPUESTO = `
          t.total_costo,
          p.importe_total - t.total_costo AS total_margen,
          p.estado = 'borrador' AS editable,
+         p.token_publico, p.respuesta_cliente, p.fecha_respuesta_cliente, p.comentario_cliente,
          json_build_object(
            'id_solicitud', s.id_solicitud,
            'nombre_cliente', CONCAT_WS(' ', c.nombre, NULLIF(c.apellido, '-')),
            'nombre_tipo_evento', te.nombre,
            'fecha_evento_prevista', s.fecha_evento_prevista,
            'cantidad_asistentes', s.cantidad_asistentes,
+           'id_sede', s.id_sede,
+           'sede_prevista', s.sede_prevista,
            'estado', s.estado
          ) AS solicitud,
          COALESCE(

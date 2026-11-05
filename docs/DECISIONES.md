@@ -319,9 +319,8 @@ compromisos que puede afectar quedan **a revisar** en `afectados_cambio`:
 - las tareas, solo las que el usuario tilda.
 
 Nada más se mueve solo: ninguna tarea se reprograma, ningún proveedor se da por
-confirmado, las tareas de un servicio cancelado siguen como estaban, y revisar
-un compromiso solo guarda una nota (`PATCH /revisiones/:id` no toca la tarea
-ni el proveedor).
+confirmado y las tareas de un servicio cancelado siguen como estaban. Revisar deja
+una nota y, si la persona lo indica, actualiza el compromiso (decisión 22).
 
 **Por qué:** es el criterio que dio el cliente en la segunda validación. El
 sistema no sabe si el catering puede ir el 22 en vez del 15, ni si la tarea de
@@ -402,3 +401,95 @@ completas y un proveedor pendiente sigue con `alerta: true`. El porcentaje de
 avance se reemplazó por "tareas X de Y" y "servicios confirmados X de Y"
 justamente por eso: con el porcentaje, 100% de tareas parecía "listo" aunque un
 proveedor no hubiera confirmado.
+
+## 18. Los datos se validan en dos niveles
+
+**Formato, en la API.** `middlewares/datos.middleware.js` limpia y valida el
+body antes del controlador, con una regla por tipo de dato: recorta los textos
+(un nombre hecho de espacios cuenta como vacío), y valida email, teléfono, CUIT
+(11 dígitos), DNI/CUIT (7, 8 u 11), fechas (hasta 60 meses adelante) y
+asistentes (hasta 10.000, la capacidad máxima que maneja el negocio).
+
+**Repetidos, en la base.** Índices únicos `uq_*` sobre el dato normalizado:
+clientes por DNI/CUIT, proveedores por CUIT y razón social, servicios y tipos por
+nombre, empleados por legajo, usuarios por email sin distinguir mayúsculas,
+empresas por CUIT y nombre, solicitudes abiertas iguales, renglones y servicios
+idénticos y tareas libres idénticas.
+
+**Por qué en la base y no solo en la API:** un `SELECT` previo no aguanta dos
+pedidos simultáneos, porque los dos ven que no existe y los dos insertan. El
+índice es atómico: de 10 altas iguales a la vez entra exactamente una.
+
+**Qué se considera repetido.** Lo que no puede ser dos cosas distintas: el mismo
+cliente, tipo y fecha. Una solicitud cancelada o rechazada no cuenta, porque el
+cliente puede volver a pedirlo. El mismo cliente con otro tipo de evento ese día
+sí se puede. Dos eventos abiertos iguales cruzan dos tablas, así que los controla
+la API con un bloqueo por cliente (409).
+
+**Un salón, un evento por día.** Después de un evento hay limpieza y hay que
+preparar el siguiente, así que la misma sede no se puede ocupar dos veces el mismo
+día (`uq_eventos_sede_dia`, 409). Solo cuentan los eventos abiertos: si se cancela,
+el salón queda libre. La solicitud no reserva nada: solo es un pedido, y el salón
+se ocupa al confirmar el evento. Las sedes son un catálogo y no texto libre: con
+texto, "Las Palmas" y "Salón Las Palmas" serían dos salones y la regla no saltaría.
+
+**Qué NO se limita:** cuántos eventos distintos tiene una empresa por día, ni si
+un coordinador o un proveedor están en dos eventos el mismo día. No son datos
+inválidos: son decisiones del negocio.
+
+## 19. El presupuesto llega al cliente con un link (no con un usuario)
+
+Al presentar un presupuesto, la empresa tiene un link para mandarle al cliente. No
+hace falta que tenga usuario, y ve los servicios, los importes y el total.
+
+**Seguridad:** es la única parte de la API sin login. El link lleva un UUID
+aleatorio (`token_publico`): no se puede adivinar ni recorrer como un id, y cada
+versión tiene el suyo. La consulta nombra las columnas una por una y no incluye
+costos, márgenes ni proveedores. Quien tenga el link lo puede ver: es lo mismo que
+reenviar un PDF.
+
+**El cliente responde, pero no decide el sistema.** Su respuesta queda registrada y
+avisada, sin cambiar el estado ni crear el evento: confirmarlo necesita elegir sede
+y coordinador, y la sede puede estar ocupada. Es el criterio de la decisión 14.
+
+## 20. "No realizada" se calcula
+
+Una tarea sin completar cuyo evento se cerró o ya pasó no figura como pendiente ni
+como vencida: figura como "No realizada". No se guarda ni se cambia el estado,
+porque el sistema no sabe si se hizo y nadie la marcó, o si de verdad no se hizo.
+
+## 21. Cuando el evento pasó, sus tareas no se modifican
+
+Desde el día siguiente al evento, una tarea no admite cambios de estado, edición ni
+baja (409), aunque el evento siga abierto. Lo que muestra es lo que se registró a
+tiempo: marcarla como hecha semanas después haría que el dato no se pueda creer.
+
+**La excepción:** una tarea prevista para después del evento (el cierre con el
+proveedor) se puede modificar hasta su fecha, porque ese trabajo se hace después.
+La edición también se bloquea: si no, mover la fecha prevista la volvería a abrir.
+Si la fecha del evento se corre hacia adelante, sus tareas vuelven a estar abiertas.
+
+## 22. Revisar permite actualizar el compromiso (tercera validación)
+
+Antes, revisar solo guardaba una nota y la tarea se cambiaba aparte. El cliente pidió
+que la revisión sirva para actualizar la fecha prevista, el responsable o el estado
+de la tarea, y por eso se hace en el mismo paso y en la misma transacción. También se
+puede actualizar el estado del proveedor. Cambiar de proveedor o los importes no: es
+otro cambio de lo acordado y pide su motivo.
+
+El criterio de la decisión 14 sigue: el sistema no cambia nada solo. Lo cambia la
+persona, y queda en palabras qué actualizó (`cambios_revision`).
+
+Un cambio no figura como revisado mientras le quede un compromiso a revisar
+(`revision_completa`). Se calcula, igual que "a revisar" (decisión 15).
+
+## 23. El recorrido de una tarea se guarda (tercera validación)
+
+Cada cambio de estado deja una fila en `cambios_estado_tarea` con el estado anterior,
+el nuevo, quién y cuándo, en la misma transacción que el cambio. Si una tarea se
+reabre, `fecha_finalizacion` se limpia pero `fecha_primera_finalizacion` queda: el
+cliente quiere saber que se había terminado y después surgió un problema.
+
+Una tarea interna que ya cambió de estado no se elimina: lo que pasó no se borra
+(decisión 16). Lo anterior a este cambio no se puede recuperar: de las tareas ya
+completadas solo se conoce su fecha de finalización.

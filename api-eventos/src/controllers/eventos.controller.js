@@ -1,6 +1,6 @@
 import pool from "../data/db.js";
 import { responderError } from "../utils/errores.js";
-import { esEmpleadoActivo } from "../utils/consultas.js";
+import { esEmpleadoActivo, sedeDeEmpresa } from "../utils/consultas.js";
 import {
   esIdValido,
   esFechaValida,
@@ -44,8 +44,14 @@ const MENSAJES = {
   yaTieneEvento: "La solicitud ya tiene un evento",
   cerrado: MENSAJE_EVENTO_CERRADO,
   noIniciable: "Solo se puede iniciar la preparacion de un evento confirmado",
-  asistentesInvalidos: "La cantidad de asistentes tiene que ser mayor a 0"
+  asistentesInvalidos: "La cantidad de asistentes tiene que ser mayor a 0",
+  eventoRepetido: "El cliente ya tiene un evento de ese tipo en esa fecha",
+  sedeOcupada: "La sede ya esta ocupada por otro evento en esa fecha",
+  sedeInvalida: "La sede no existe o esta inactiva"
 };
+
+// El indice unico uq_eventos_sede_dia: el mismo salon, el mismo dia
+const esSedeOcupada = (error) => error.code === "23505" && error.constraint === "uq_eventos_sede_dia";
 
 const solicitudCerrada = (estado) =>
   `La solicitud esta ${estado} y no admite presupuestos`;
@@ -74,7 +80,7 @@ const SELECT_EVENTO_LISTADO = `
 // json_build_object devolveria un objeto con todos los campos en null, y el
 // contrato pide coordinador: null.
 const SELECT_EVENTO_DETALLE = `
-  SELECT e.id_evento, e.estado, e.fecha_evento_confirmada, e.sede_acordada,
+  SELECT e.id_evento, e.estado, e.fecha_evento_confirmada, e.id_sede, e.sede_acordada,
          e.condiciones_acordadas, e.cantidad_asistentes,
          e.observaciones_cierre, e.feedback_cliente,
          e.fecha_cierre,
@@ -185,6 +191,26 @@ const validarDatosEvento = async (body, fechaActual = null) => {
 const coordinadorValido = async (ejecutor, idCoordinador, idEmpresa) =>
   esVacio(idCoordinador) || esEmpleadoActivo(ejecutor, idCoordinador, idEmpresa);
 
+// El mismo cliente no puede tener dos eventos abiertos del mismo tipo el mismo
+// dia. Cruza dos tablas, asi que un indice no alcanza: el bloqueo por cliente
+// hace que dos pedidos a la vez queden en fila y el segundo vea al primero.
+const eventoRepetido = async (client, idSolicitud, fecha) => {
+  await client.query(
+    "SELECT pg_advisory_xact_lock(id_cliente) FROM solicitudes WHERE id_solicitud = $1",
+    [idSolicitud]
+  );
+  const { rows } = await client.query(
+    `SELECT 1 FROM eventos otro
+     JOIN solicitudes so ON so.id_solicitud = otro.id_solicitud
+     JOIN solicitudes s ON s.id_solicitud = $1
+     WHERE so.id_cliente = s.id_cliente AND so.id_tipo_evento = s.id_tipo_evento
+       AND otro.fecha_evento_confirmada = $2 AND otro.estado = ANY($3)
+       AND otro.id_solicitud <> $1`,
+    [idSolicitud, fecha, ESTADOS_ABIERTOS]
+  );
+  return rows.length > 0;
+};
+
 // ---------------------------------------------------------------------------
 // Endpoints
 // ---------------------------------------------------------------------------
@@ -202,7 +228,7 @@ export const aceptarPresupuesto = async (req, res) => {
   const idEmpresa = req.usuario.id_empresa;
   const {
     fecha_evento_confirmada,
-    sede_acordada,
+    id_sede,
     condiciones_acordadas,
     id_empleado_coordinador
   } = req.body;
@@ -264,6 +290,18 @@ export const aceptarPresupuesto = async (req, res) => {
       return res.status(400).json({ mensaje: MENSAJES.coordinadorInvalido });
     }
 
+    if (await eventoRepetido(client, id_solicitud, fecha_evento_confirmada)) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ mensaje: MENSAJES.eventoRepetido });
+    }
+
+    // La sede es opcional, pero si viene tiene que ser del catalogo de la empresa
+    const sede = esVacio(id_sede) ? null : esIdValido(id_sede) ? await sedeDeEmpresa(client, id_sede, idEmpresa) : null;
+    if (!esVacio(id_sede) && !sede) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ mensaje: MENSAJES.sedeInvalida });
+    }
+
     // 1. El presupuesto elegido
     await client.query(
       "UPDATE presupuestos SET estado = 'aceptado' WHERE id_presupuesto = $1",
@@ -291,9 +329,9 @@ export const aceptarPresupuesto = async (req, res) => {
     const evento = await client.query(
       `INSERT INTO eventos (id_empresa, id_solicitud, id_presupuesto_aceptado,
                             id_empleado_coordinador, fecha_evento_confirmada,
-                            sede_acordada, condiciones_acordadas,
+                            id_sede, sede_acordada, condiciones_acordadas,
                             cantidad_asistentes)
-       VALUES ($1, $2, $3, $4, $5, $6, $7,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8,
                (SELECT cantidad_asistentes FROM solicitudes WHERE id_solicitud = $2))
        RETURNING id_evento`,
       [
@@ -302,7 +340,8 @@ export const aceptarPresupuesto = async (req, res) => {
         req.params.id,
         esVacio(id_empleado_coordinador) ? null : id_empleado_coordinador,
         fecha_evento_confirmada,
-        sede_acordada ?? null,
+        sede?.id_sede ?? null,
+        sede?.nombre ?? null,
         condiciones_acordadas ?? null
       ]
     );
@@ -334,6 +373,9 @@ export const aceptarPresupuesto = async (req, res) => {
 
     // Red de seguridad: el UNIQUE (id_solicitud) de eventos impide en la base
     // que una solicitud tenga dos eventos, aunque algo se escapara del chequeo.
+    if (esSedeOcupada(error)) {
+      return res.status(409).json({ mensaje: MENSAJES.sedeOcupada });
+    }
     if (error.code === "23505") {
       return res.status(409).json({ mensaje: MENSAJES.yaTieneEvento });
     }
@@ -437,9 +479,14 @@ export const editarEvento = async (req, res) => {
     return res.status(400).json({ mensaje: MENSAJES_CAMBIO.tareasAjenas });
   }
 
+  if (!esVacio(body.id_sede) && !esIdValido(body.id_sede)) {
+    return res.status(400).json({ mensaje: MENSAJES.sedeInvalida });
+  }
+
   const nuevo = {
     fecha_evento_confirmada: body.fecha_evento_confirmada,
-    sede_acordada: textoONull(body.sede_acordada),
+    id_sede: esVacio(body.id_sede) ? null : Number(body.id_sede),
+    sede_acordada: null,
     condiciones_acordadas: textoONull(body.condiciones_acordadas),
     cantidad_asistentes: Number(body.cantidad_asistentes),
     id_empleado_coordinador: esVacio(body.id_empleado_coordinador)
@@ -459,7 +506,7 @@ export const editarEvento = async (req, res) => {
     // Bloqueado hasta el COMMIT: dos cambios a la vez quedan en fila y el
     // segundo compara contra lo que dejo el primero
     const actual = await client.query(
-      `SELECT estado, fecha_evento_confirmada, sede_acordada, condiciones_acordadas,
+      `SELECT estado, id_solicitud, fecha_evento_confirmada, id_sede, sede_acordada, condiciones_acordadas,
               cantidad_asistentes, id_empleado_coordinador
        FROM eventos WHERE id_evento = $1 AND id_empresa = $2
        FOR UPDATE`,
@@ -472,6 +519,16 @@ export const editarEvento = async (req, res) => {
 
     const errorDatos = await validarDatosEvento(body, evento.fecha_evento_confirmada);
     if (errorDatos) return responder(400, errorDatos);
+
+    // Misma sede: se conserva el nombre acordado aunque despues le hayan cambiado
+    // el nombre en el catalogo. Otra sede: tiene que estar activa.
+    if (nuevo.id_sede === evento.id_sede) {
+      nuevo.sede_acordada = evento.sede_acordada;
+    } else if (nuevo.id_sede !== null) {
+      const sede = await sedeDeEmpresa(client, nuevo.id_sede, idEmpresa);
+      if (!sede) return responder(400, MENSAJES.sedeInvalida);
+      nuevo.sede_acordada = sede.nombre;
+    }
 
     const cambiados = CAMPOS_REGISTRADOS.filter(({ campo }) => nuevo[campo] !== evento[campo]);
     const cambioCoordinador = nuevo.id_empleado_coordinador !== evento.id_empleado_coordinador;
@@ -489,11 +546,16 @@ export const editarEvento = async (req, res) => {
       return responder(400, MENSAJES_CAMBIO.tareasAjenas);
     }
 
+    if (nuevo.fecha_evento_confirmada !== evento.fecha_evento_confirmada
+        && await eventoRepetido(client, evento.id_solicitud, nuevo.fecha_evento_confirmada)) {
+      return responder(409, MENSAJES.eventoRepetido);
+    }
+
     await client.query(
       `UPDATE eventos
        SET fecha_evento_confirmada = $1, sede_acordada = $2,
            condiciones_acordadas = $3, cantidad_asistentes = $4,
-           id_empleado_coordinador = $5
+           id_empleado_coordinador = $5, id_sede = $7
        WHERE id_evento = $6`,
       [
         nuevo.fecha_evento_confirmada,
@@ -501,7 +563,8 @@ export const editarEvento = async (req, res) => {
         nuevo.condiciones_acordadas,
         nuevo.cantidad_asistentes,
         nuevo.id_empleado_coordinador,
-        req.params.id
+        req.params.id,
+        nuevo.id_sede
       ]
     );
 
@@ -548,6 +611,9 @@ export const editarEvento = async (req, res) => {
     res.json(respuesta);
   } catch (error) {
     await client.query("ROLLBACK");
+    if (esSedeOcupada(error)) {
+      return res.status(409).json({ mensaje: MENSAJES.sedeOcupada });
+    }
     responderError(res, error);
   } finally {
     client.release();

@@ -5,6 +5,7 @@ import { useSesion } from "../contexto/useSesion.js";
 import { EMPLEADO, coloresRoles, nombresRoles } from "../utils/menu";
 import { opcionesRol, reglasPassword } from "../utils/usuarios.js";
 import { formatearFecha } from "../utils/formato.js";
+import { ordenFecha } from "../utils/tablas.js";
 
 export const EtiquetaRol = ({ rol }) =>
   <Tag color={coloresRoles[rol]} variant={coloresRoles[rol] ? undefined : "outlined"}>{nombresRoles[rol] || rol}</Tag>;
@@ -54,7 +55,7 @@ export default function TablaUsuarios({ usuarios, cargando, actualizar, cambiarR
       <Tag color={u.activo ? "green" : undefined} variant={u.activo ? undefined : "outlined"}>{u.activo ? "Activo" : "Inactivo"}</Tag>
       {u.debe_cambiar_password && <Tag color="gold">Contraseña temporal</Tag>}
     </Space> },
-    { title: "Alta", dataIndex: "fecha_creacion", render: formatearFecha },
+    { title: "Alta", dataIndex: "fecha_creacion", render: formatearFecha, ...ordenFecha("fecha_creacion") },
     { title: "Acciones", key: "acciones", render: (_, u) => <Space wrap>
       {editar && <Button size="small" disabled={ocupado} onClick={() => editar(u)}>Editar</Button>}
       <Popconfirm title={u.activo ? `¿Desactivar a ${u.nombre}? No va a poder entrar.` : `¿Activar a ${u.nombre}?`}

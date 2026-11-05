@@ -5,11 +5,13 @@ import { activarUsuario, crearUsuario, editarUsuario, listarUsuarios, resetearPa
 import { listarCatalogo } from "../servicios/catalogosService.js";
 import { useConsulta } from "../contexto/useConsulta.js";
 import { useAccion } from "../contexto/useAccion.js";
+import { useFiltros } from "../contexto/useFiltros.js";
 import { useSesion } from "../contexto/useSesion.js";
 import { EMPLEADO } from "../utils/menu";
 import { nombreCompleto } from "../utils/formularios.js";
 import EncabezadoPagina from "../componentes/EncabezadoPagina";
 import ErrorConsulta from "../componentes/ErrorConsulta";
+import LimpiarFiltros from "../componentes/LimpiarFiltros";
 import TablaUsuarios from "../componentes/TablaUsuarios";
 import { opcionesRol, reglasPassword } from "../utils/usuarios.js";
 
@@ -56,9 +58,7 @@ function EditorUsuario({ datos, cerrar, guardado }) {
 // Usuarios de mi empresa (solo admin). Las reglas (al menos un admin activo,
 // no desactivarse a uno mismo) las aplica la API; sus 409 se muestran tal cual.
 export default function Usuarios() {
-  const [buscar, setBuscar] = useState("");
-  const [rol, setRol] = useState(null);
-  const [activo, setActivo] = useState("todos");
+  const { filtros: { buscar, rol, activo }, filtrar, limpiar, hayFiltros, clave } = useFiltros({ activo: "todos" }, { activo: "todos" });
   const [editor, setEditor] = useState(null);
   const consulta = useConsulta(useCallback(async () => (await listarUsuarios({ ...(buscar ? { buscar } : {}), ...(rol ? { rol } : {}),
     ...(activo === "todos" ? {} : { activo }) })).data, [buscar, rol, activo]));
@@ -67,12 +67,13 @@ export default function Usuarios() {
       acciones={<Button type="primary" icon={<PlusOutlined />} onClick={() => setEditor({})}>Nuevo usuario</Button>} />
     <Alert type="info" showIcon className="aviso-formulario" title="Para darle acceso a alguien del personal, usá Personal → Dar acceso. Desde acá podés crear usuarios sin ficha de empleado, como un socio." />
     <ErrorConsulta {...consulta} />
-    <Card><div className="barra-tabla">
-      <Input.Search placeholder="Buscar por nombre o email" allowClear onSearch={setBuscar} style={{ maxWidth: 320 }} aria-label="Buscar usuarios" />
+    <Card><div className="barra-tabla" key={clave}>
+      <Input.Search placeholder="Buscar por nombre o email" allowClear onSearch={(v) => filtrar("buscar", v)} style={{ maxWidth: 320 }} aria-label="Buscar usuarios" />
       <Space wrap>
-        <Select aria-label="Rol" placeholder="Todos los roles" allowClear value={rol} onChange={setRol} style={{ minWidth: 160 }} options={opcionesRol()} />
-        <Select aria-label="Estado" value={activo} onChange={setActivo} style={{ minWidth: 130 }}
+        <Select aria-label="Rol" placeholder="Todos los roles" allowClear value={rol} onChange={(v) => filtrar("rol", v)} style={{ minWidth: 160 }} options={opcionesRol()} />
+        <Select aria-label="Estado" value={activo} onChange={(v) => filtrar("activo", v)} style={{ minWidth: 130 }}
           options={[{ value: "todos", label: "Todos" }, { value: "true", label: "Activos" }, { value: "false", label: "Inactivos" }]} />
+        <LimpiarFiltros activo={hayFiltros} alTocar={limpiar} />
         <Button icon={<ReloadOutlined />} aria-label="Actualizar" onClick={consulta.recargar} loading={consulta.cargando} />
       </Space>
     </div>

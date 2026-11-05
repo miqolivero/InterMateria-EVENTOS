@@ -7,6 +7,7 @@ import {
   cambiarActivoEmpleado,
   darAcceso
 } from "../controllers/empleados.controller.js";
+import { datosEmpleado, datosUsuario, datosAcceso } from "../middlewares/datos.middleware.js";
 import { validarParamId } from "../middlewares/validarId.middleware.js";
 import { permitirRoles } from "../middlewares/auth.middleware.js";
 
@@ -22,9 +23,9 @@ const soloAdmin = permitirRoles("admin");
 
 router.get("/", obtenerEmpleados);
 router.get("/:id", obtenerEmpleadoPorId);
-router.post("/", soloAdmin, crearEmpleado);
-router.put("/:id", soloAdmin, editarEmpleado);
+router.post("/", soloAdmin, datosEmpleado, datosAcceso, crearEmpleado);
+router.put("/:id", soloAdmin, datosEmpleado, editarEmpleado);
 router.patch("/:id/activo", soloAdmin, cambiarActivoEmpleado);
-router.post("/:id/acceso", soloAdmin, darAcceso);
+router.post("/:id/acceso", soloAdmin, datosUsuario, darAcceso);
 
 export default router;

@@ -1,13 +1,15 @@
 import pool from "../data/db.js";
 import { responderError } from "../utils/errores.js";
 import { esEmpleadoActivo } from "../utils/consultas.js";
-import { esIdValido, esFechaValida, esVacio } from "../utils/validaciones.js";
+import { esIdValido, esFechaValida, esVacio, esEnteroPositivo } from "../utils/validaciones.js";
 import {
   ESTADOS_EVENTO_ABIERTO,
   MENSAJE_EVENTO_CERRADO
 } from "./eventos.controller.js";
 import {
   CONDICION_VENCIDA,
+  CONDICION_SIN_REALIZAR,
+  CONDICION_PLAZO_TERMINADO,
   servicioARevisar,
   tareaARevisar,
   tareaPendientesRevision
@@ -38,10 +40,11 @@ const MENSAJES = {
   servicioAjeno: "El servicio no pertenece a este evento",
   estadoInvalido: "Estado de tarea invalido",
   noEliminable: "Las tareas de la secuencia del proveedor no se pueden eliminar",
-  conRevisiones: "La tarea tiene revisiones registradas y no se puede eliminar"
+  conHistorial: "La tarea tiene historial registrado y no se puede eliminar",
+  plazoTerminado: "El evento ya paso y la tarea no se puede modificar"
 };
 
-const ESTADOS_TAREA = ["pendiente", "en_curso", "completada"];
+export const ESTADOS_TAREA = ["pendiente", "en_curso", "completada"];
 
 // Regla 1: la definicion vive en utils/indicadores.js. Se reexporta porque el
 // tablero de seguimiento la importa desde aca.
@@ -61,9 +64,11 @@ export const selectTarea = (columnasExtra = "", joinsExtra = "") => `
          t.id_tipo_tarea, tt.nombre AS nombre_tipo_tarea, tt.orden,
          t.descripcion, t.id_empleado_responsable,
          emp.nombre || ' ' || emp.apellido AS nombre_responsable,
-         t.fecha_prevista, t.fecha_finalizacion, t.estado_tarea,
+         t.fecha_prevista, t.fecha_finalizacion, t.fecha_primera_finalizacion, t.estado_tarea,
          t.observaciones,
          ${CONDICION_VENCIDA} AS vencida,
+         ${CONDICION_SIN_REALIZAR} AS sin_realizar,
+         ${CONDICION_PLAZO_TERMINADO} AS plazo_terminado,
          ${tareaARevisar("t")} AS a_revisar,
          ${tareaPendientesRevision("t")} AS pendientes_revision
          ${columnasExtra}
@@ -129,7 +134,8 @@ export const responsableObligatorio = (usuario) =>
 const datosTarea = async (ejecutor, idTarea, idEmpresa, idResponsable = null) => {
   const resultado = await ejecutor.query(
     `SELECT t.id_tarea, t.id_evento, t.id_servicio_x_evento, t.id_tipo_tarea,
-            t.estado_tarea, e.estado AS estado_evento
+            t.estado_tarea, e.estado AS estado_evento,
+            ${CONDICION_PLAZO_TERMINADO} AS plazo_terminado
      FROM tareas t
      JOIN eventos e ON e.id_evento = t.id_evento
      WHERE t.id_tarea = $1 AND e.id_empresa = $2
@@ -163,10 +169,63 @@ const validarFormatoTarea = (body) => {
 // Endpoints
 // ---------------------------------------------------------------------------
 
-// GET /api/eventos/:id/tareas?estado_tarea=&vencidas=true
+// Los filtros de estado, iguales en todos los listados de tareas. Una tarea "no
+// realizada" no aparece al pedir pendientes o en curso, aunque ese sea su estado
+// guardado. Un estado que no existe se ignora, como los demas filtros invalidos.
+const agregarFiltrosDeEstado = (query, condiciones, valores) => {
+  if (ESTADOS_TAREA.includes(query.estado_tarea)) {
+    valores.push(query.estado_tarea);
+    condiciones.push(`t.estado_tarea = $${valores.length}`);
+    if (query.estado_tarea !== "completada") condiciones.push(`NOT ${CONDICION_SIN_REALIZAR}`);
+  }
+  if (query.vencidas === "true") condiciones.push(CONDICION_VENCIDA);
+  if (query.sin_realizar === "true") condiciones.push(CONDICION_SIN_REALIZAR);
+  // Lo que falta hacer, pendiente o en curso: la tarjeta "Tareas pendientes"
+  if (query.sin_completar === "true") condiciones.push(`t.estado_tarea <> 'completada' AND NOT ${CONDICION_SIN_REALIZAR}`);
+};
+
+// GET /api/tareas?id_evento=&id_empleado_responsable=&estado_tarea=&vencidas=true&sin_realizar=true&sin_completar=true&dias=
+// Todas las tareas de la empresa, de todos sus eventos (admin y coordinador).
+// Primero las vencidas, despues por fecha.
+// dias: la misma ventana del tablero (eventos abiertos de aca a esos dias, y los
+// que ya pasaron sin cerrarse), asi el numero de cada tarjeta coincide con la lista.
+export const obtenerTareas = async (req, res) => {
+  const condiciones = ["e.id_empresa = $1"];
+  const valores = [req.usuario.id_empresa];
+
+  // Un id con formato invalido se ignora, como los demas filtros
+  for (const [parametro, columna] of [["id_evento", "t.id_evento"], ["id_empleado_responsable", "t.id_empleado_responsable"]]) {
+    if (esIdValido(req.query[parametro])) {
+      valores.push(req.query[parametro]);
+      condiciones.push(`${columna} = $${valores.length}`);
+    }
+  }
+  agregarFiltrosDeEstado(req.query, condiciones, valores);
+
+  if (esEnteroPositivo(req.query.dias) && Number(req.query.dias) <= 365) {
+    valores.push(ESTADOS_EVENTO_ABIERTO, Number(req.query.dias));
+    condiciones.push(`e.estado = ANY($${valores.length - 1})`);
+    condiciones.push(`e.fecha_evento_confirmada <= CURRENT_DATE + $${valores.length}::int`);
+  }
+
+  try {
+    const consulta = selectTarea(`${COLUMNAS_EVENTO_DE_TAREA}, e.estado AS estado_evento`, JOINS_EVENTO_DE_TAREA);
+    const resultado = await pool.query(
+      `${consulta}
+       WHERE ${condiciones.join(" AND ")}
+       ORDER BY ${CONDICION_VENCIDA} DESC, ${CONDICION_SIN_REALIZAR}, t.fecha_prevista NULLS LAST, t.id_tarea`,
+      valores
+    );
+
+    res.json(resultado.rows);
+  } catch (error) {
+    responderError(res, error);
+  }
+};
+
+// GET /api/eventos/:id/tareas?estado_tarea=&vencidas=true&sin_realizar=true
 export const obtenerTareasDelEvento = async (req, res) => {
   const idEmpresa = req.usuario.id_empresa;
-  const { estado_tarea, vencidas } = req.query;
 
   try {
     // Un evento ajeno da 404, no []: no se revela que el id existe
@@ -177,15 +236,8 @@ export const obtenerTareasDelEvento = async (req, res) => {
     const condiciones = ["t.id_evento = $1"];
     const valores = [req.params.id];
 
-    if (estado_tarea) {
-      valores.push(estado_tarea);
-      condiciones.push(`t.estado_tarea = $${valores.length}`);
-    }
-
     // El filtro usa la misma condicion que el campo calculado
-    if (vencidas === "true") {
-      condiciones.push(CONDICION_VENCIDA);
-    }
+    agregarFiltrosDeEstado(req.query, condiciones, valores);
 
     const resultado = await pool.query(
       `${SELECT_TAREA} WHERE ${condiciones.join(" AND ")} ${ORDEN_TAREAS}`,
@@ -291,6 +343,10 @@ export const editarTarea = async (req, res) => {
     if (!ESTADOS_EVENTO_ABIERTO.includes(tarea.estado_evento)) {
       return res.status(409).json({ mensaje: MENSAJE_EVENTO_CERRADO });
     }
+    // Sin este chequeo, mover la fecha prevista la volveria a abrir
+    if (tarea.plazo_terminado) {
+      return res.status(409).json({ mensaje: MENSAJES.plazoTerminado });
+    }
 
     if (!(await esEmpleadoActivo(pool, id_empleado_responsable, idEmpresa))) {
       return res.status(400).json({ mensaje: MENSAJES.responsableInvalido });
@@ -312,11 +368,78 @@ export const editarTarea = async (req, res) => {
   }
 };
 
+// Cambia el estado y deja el registro, con el client de una transaccion: no puede
+// quedar un estado nuevo sin su historial. La usan el cambio de estado y la
+// revision. Devuelve false si el evento se cerro o paso mientras tanto.
+//
+// Regla 7: completar guarda la fecha (si ya estaba completada, conserva la
+// original). Cualquier otro estado la limpia, pero la primera finalizacion queda:
+// asi se sabe que se habia terminado y despues surgio un problema.
+// Regla 6: aca NO se toca servicios_x_evento. Que la tarea "Confirmar
+// asistencia" este completada no significa que el proveedor confirmo.
+// Tampoco se toca afectados_cambio: completar una tarea a revisar no la
+// da por revisada (eso se hace con PATCH /revisiones/:id y una nota).
+// $1 va con ::varchar en todos los lugares: se usa como valor de la columna
+// y dentro de los CASE, y sin el cast PostgreSQL deduce un tipo distinto
+// para cada uso y rechaza la consulta.
+export const aplicarEstadoTarea = async (client, idTarea, estadoNuevo, idUsuario) => {
+  const actual = await client.query("SELECT estado_tarea FROM tareas WHERE id_tarea = $1 FOR UPDATE", [idTarea]);
+  const resultado = await client.query(
+    `UPDATE tareas t
+     SET estado_tarea = $1::varchar,
+         fecha_finalizacion = CASE WHEN $1::varchar = 'completada'
+                                   THEN COALESCE(t.fecha_finalizacion, CURRENT_DATE)
+                                   ELSE NULL END,
+         fecha_primera_finalizacion = CASE WHEN $1::varchar = 'completada'
+                                           THEN COALESCE(t.fecha_primera_finalizacion, t.fecha_finalizacion, CURRENT_DATE)
+                                           ELSE t.fecha_primera_finalizacion END
+     FROM eventos e
+     WHERE t.id_tarea = $2 AND e.id_evento = t.id_evento
+       AND e.estado = ANY($3) AND NOT ${CONDICION_PLAZO_TERMINADO}
+     RETURNING t.id_tarea`,
+    [estadoNuevo, idTarea, ESTADOS_EVENTO_ABIERTO]
+  );
+  if (resultado.rows.length === 0) return false;
+
+  const anterior = actual.rows[0].estado_tarea;
+  if (anterior !== estadoNuevo) {
+    await client.query(
+      `INSERT INTO cambios_estado_tarea (id_tarea, estado_anterior, estado_nuevo, id_usuario)
+       VALUES ($1, $2, $3, $4)`,
+      [idTarea, anterior, estadoNuevo, idUsuario]
+    );
+  }
+  return true;
+};
+
+// GET /api/tareas/:id/historial
+// Por que estados paso la tarea, del mas nuevo al mas viejo. El empleado solo
+// encuentra las suyas (regla 11).
+export const obtenerHistorialTarea = async (req, res) => {
+  try {
+    const tarea = await datosTarea(pool, req.params.id, req.usuario.id_empresa, responsableObligatorio(req.usuario));
+    if (!tarea) {
+      return res.status(404).json({ mensaje: MENSAJES.noEncontrada });
+    }
+    const { rows } = await pool.query(
+      `SELECT c.id_cambio_estado, c.estado_anterior, c.estado_nuevo, c.fecha_hora,
+              json_build_object('id_usuario', u.id_usuario, 'nombre', u.nombre) AS usuario
+       FROM cambios_estado_tarea c
+       JOIN usuarios u ON u.id_usuario = c.id_usuario
+       WHERE c.id_tarea = $1
+       ORDER BY c.fecha_hora DESC, c.id_cambio_estado DESC`,
+      [req.params.id]
+    );
+    res.json(rows);
+  } catch (error) {
+    responderError(res, error);
+  }
+};
+
 // PATCH /api/tareas/:id/estado
 // Regla 7. Desde la Fase 11 no hay secuencia: cualquier paso pasa a cualquier
-// estado, en cualquier orden. El estado del evento y el responsable (para el
-// empleado) van en el WHERE del UPDATE, asi el chequeo y el cambio son una
-// sola operacion y no hace falta bloquear nada.
+// estado, en cualquier orden. El estado del evento va en el WHERE del UPDATE:
+// el chequeo y el cambio son una sola operacion.
 export const cambiarEstadoTarea = async (req, res) => {
   const idEmpresa = req.usuario.id_empresa;
   const { estado_tarea } = req.body;
@@ -325,6 +448,7 @@ export const cambiarEstadoTarea = async (req, res) => {
     return res.status(400).json({ mensaje: MENSAJES.estadoInvalido });
   }
 
+  const client = await pool.connect();
   try {
     // Regla 11: el empleado solo encuentra SUS tareas (filtro en el WHERE)
     const tarea = await datosTarea(
@@ -341,44 +465,34 @@ export const cambiarEstadoTarea = async (req, res) => {
     if (!ESTADOS_EVENTO_ABIERTO.includes(tarea.estado_evento)) {
       return res.status(409).json({ mensaje: MENSAJE_EVENTO_CERRADO });
     }
+    if (tarea.plazo_terminado) {
+      return res.status(409).json({ mensaje: MENSAJES.plazoTerminado });
+    }
 
-    // Regla 7: completar guarda la fecha (si ya estaba completada, conserva la
-    // original). Cualquier otro estado la limpia.
-    // Regla 6: aca NO se toca servicios_x_evento. Que la tarea "Confirmar
-    // asistencia" este completada no significa que el proveedor confirmo.
-    // Tampoco se toca afectados_cambio: completar una tarea a revisar no la
-    // da por revisada (eso se hace con PATCH /revisiones/:id y una nota).
-    // $1 va con ::varchar en los dos lugares: se usa como valor de la columna
-    // y dentro del CASE, y sin el cast PostgreSQL deduce un tipo distinto
-    // para cada uso y rechaza la consulta.
-    const resultado = await pool.query(
-      `UPDATE tareas t
-       SET estado_tarea = $1::varchar,
-           fecha_finalizacion = CASE WHEN $1::varchar = 'completada'
-                                     THEN COALESCE(t.fecha_finalizacion, CURRENT_DATE)
-                                     ELSE NULL END
-       FROM eventos e
-       WHERE t.id_tarea = $2 AND e.id_evento = t.id_evento
-         AND e.estado = ANY($3)
-       RETURNING t.id_tarea`,
-      [estado_tarea, req.params.id, ESTADOS_EVENTO_ABIERTO]
-    );
+    await client.query("BEGIN");
+    const aplicado = await aplicarEstadoTarea(client, req.params.id, estado_tarea, req.usuario.id);
 
-    // El evento se cerro entre la lectura y el UPDATE
-    if (resultado.rows.length === 0) {
+    // El evento se cerro o paso entre la lectura y el UPDATE
+    if (!aplicado) {
+      await client.query("ROLLBACK");
       return res.status(409).json({ mensaje: MENSAJE_EVENTO_CERRADO });
     }
+    await client.query("COMMIT");
 
     res.json(await buscarTarea(pool, req.params.id, idEmpresa));
   } catch (error) {
+    await client.query("ROLLBACK");
     responderError(res, error);
+  } finally {
+    client.release();
   }
 };
 
 // DELETE /api/tareas/:id
 // Solo tareas libres. Las de los pasos con el proveedor son el registro de lo
 // que se hizo con el. Una tarea que quedo en afectados_cambio tampoco se
-// borra: la FK lo impide y el historial no pierde nada (409).
+// borra, ni una que ya cambio de estado: la FK lo impide y el historial no
+// pierde nada (409).
 export const eliminarTarea = async (req, res) => {
   const idEmpresa = req.usuario.id_empresa;
 
@@ -389,6 +503,9 @@ export const eliminarTarea = async (req, res) => {
     }
     if (!ESTADOS_EVENTO_ABIERTO.includes(tarea.estado_evento)) {
       return res.status(409).json({ mensaje: MENSAJE_EVENTO_CERRADO });
+    }
+    if (tarea.plazo_terminado) {
+      return res.status(409).json({ mensaje: MENSAJES.plazoTerminado });
     }
     if (tarea.id_tipo_tarea) {
       return res.status(409).json({ mensaje: MENSAJES.noEliminable });
@@ -402,7 +519,7 @@ export const eliminarTarea = async (req, res) => {
 
     res.status(204).send();
   } catch (error) {
-    responderError(res, error, { asociado: MENSAJES.conRevisiones });
+    responderError(res, error, { asociado: MENSAJES.conHistorial });
   }
 };
 
@@ -483,14 +600,7 @@ export const obtenerMisTareas = async (req, res) => {
   ];
   const valores = [idEmpleado, idEmpresa, ESTADOS_EVENTO_ABIERTO];
 
-  // Un estado que no existe se ignora, como los demas filtros invalidos
-  if (ESTADOS_TAREA.includes(req.query.estado_tarea)) {
-    valores.push(req.query.estado_tarea);
-    condiciones.push(`t.estado_tarea = $${valores.length}`);
-  }
-  if (req.query.vencidas === "true") {
-    condiciones.push(CONDICION_VENCIDA);
-  }
+  agregarFiltrosDeEstado(req.query, condiciones, valores);
 
   try {
     const consulta = selectTarea(

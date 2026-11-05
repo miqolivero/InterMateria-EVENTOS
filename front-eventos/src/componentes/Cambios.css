@@ -26,3 +26,8 @@
 @media (max-width: 480px) { .paso-generar { grid-template-columns: 1fr; } }
 .selector-estado { width: 150px; }
 .filtro-segmentado { overflow-x: auto; padding-bottom: 2px; margin-bottom: 16px; }
+.filtro-evento { min-width: 300px; max-width: 100%; }
+.filtro-responsable { min-width: 210px; }
+.filtro-estado-tarea { min-width: 170px; }
+
+.cambio-revision { margin-left: 8px; }

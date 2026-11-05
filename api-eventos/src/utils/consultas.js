@@ -77,6 +77,19 @@ export const existeEnEmpresa = async (
   return resultado.rows.length > 0;
 };
 
+// La sede elegida, si es de la empresa y esta activa. idActual: la sede que ya
+// tenia el registro, que se puede conservar aunque despues se haya desactivado.
+// Devuelve { id_sede, nombre }, o null si la sede no sirve.
+export const sedeDeEmpresa = async (ejecutor, idSede, idEmpresa, idActual = null) => {
+  const resultado = await ejecutor.query(
+    `SELECT id_sede, nombre FROM sedes
+     WHERE id_sede = $1 AND id_empresa = $2 AND (activo = TRUE OR id_sede = $3::int)`,
+    [idSede, idEmpresa, idActual]
+  );
+
+  return resultado.rows[0] ?? null;
+};
+
 // Verifica que un empleado trabaje HOY en la empresa: el vinculo
 // (empleados_x_empresa) tiene que estar activo, y el empleado tambien.
 //

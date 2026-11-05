@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { Alert, Button, Card, Descriptions, Form, Input, InputNumber, Modal, Popconfirm, Select, Skeleton, Space, Table } from "antd";
+import { Alert, Button, Card, Descriptions, Form, Input, InputNumber, Modal, Popconfirm, Select, Skeleton, Space, Table, Typography } from "antd";
 import { obtenerPresupuesto, editarPresupuesto, agregarRenglon, editarRenglon, quitarRenglon, presentarPresupuesto, rechazarPresupuesto, versionarPresupuesto, aceptarPresupuesto } from "../servicios/operacionService.js";
 import { listarCatalogo } from "../servicios/catalogosService.js";
 import { useConsulta } from "../contexto/useConsulta.js";
@@ -64,6 +64,7 @@ export default function Presupuesto() {
   const solicitudAbierta = ["pendiente", "presupuestada"].includes(p.solicitud?.estado);
   const ultimaVersion = !p.versiones?.some((v) => v.numero_version > p.numero_version);
   const hayBorrador = p.versiones?.some((v) => v.estado === "borrador");
+  const linkCliente = `${window.location.origin}/p/${p.token_publico}`;
   const columnas = [
     { title: "Servicio", dataIndex: "nombre_servicio" }, { title: "Proveedor", dataIndex: "nombre_proveedor", render: (v) => v || "Sin asignar" },
     { title: "Descripción", dataIndex: "descripcion" }, { title: "Cantidad", dataIndex: "cantidad" },
@@ -80,12 +81,20 @@ export default function Presupuesto() {
   return <>
     <Link to={`/solicitudes/${p.id_solicitud}`} className="enlace-volver">Volver a solicitud #{p.id_solicitud}</Link>
     <EncabezadoPagina titulo={`Presupuesto · versión ${p.numero_version}`} acciones={<EstadoTag estado={p.estado} />} />
+    {/* La respuesta del cliente se registra, pero confirmar es de la empresa */}
+    {p.respuesta_cliente && <Alert showIcon className="aviso-formulario" type={p.respuesta_cliente === "aceptado" ? "success" : "warning"}
+      title={`El cliente ${p.respuesta_cliente === "aceptado" ? "aceptó" : "rechazó"} este presupuesto por el link el ${formatearFecha(p.fecha_respuesta_cliente)}.`}
+      description={<>{p.comentario_cliente && <div>Comentario: {p.comentario_cliente}</div>}
+        {p.estado === "presentado" && (p.respuesta_cliente === "aceptado" ? "Falta confirmar el evento: elegí la sede y el coordinador." : "Falta registrarlo con el botón Rechazar, o preparar una nueva versión.")}</>} />}
+    {["presentado", "aceptado", "rechazado"].includes(p.estado) && <Alert showIcon type="info" className="aviso-formulario" title="Link para el cliente"
+      description={<><Typography.Text copyable={{ text: linkCliente, tooltips: ["Copiar link", "Copiado"] }} className="link-cliente">{linkCliente}</Typography.Text>
+        <div className="texto-secundario">Mandáselo por WhatsApp o mail. Ve los servicios, los importes y el total, sin costos ni proveedores. No hace falta que tenga usuario.</div></>} />}
     <Space wrap style={{ marginBottom: 20 }}>
       <Select aria-label="Versión de presupuesto" value={p.id_presupuesto} style={{ minWidth: 240 }}
         options={(p.versiones || []).map((v) => ({ value: v.id_presupuesto, label: <span>Versión {v.numero_version} <EstadoTag estado={v.estado} /></span> }))}
         onChange={(v) => { setRenglon(null); setAceptar(false); setCabecera(false); navigate(`/presupuestos/${v}`); }} />
       {editable && <Button onClick={() => { form.setFieldsValue({ validez_dias: p.validez_dias, observaciones: p.observaciones }); setCabecera(true); }}>Editar cabecera</Button>}
-      {editable && solicitudAbierta && <Popconfirm title="¿Presentar presupuesto al cliente?" okText="Presentar" cancelText="Volver" onConfirm={() => transicion(() => presentarPresupuesto(id))}>
+      {editable && solicitudAbierta && <Popconfirm title="¿Presentar el presupuesto?" description="Ya no se va a poder editar y vas a tener el link para mandarle al cliente." okText="Presentar" cancelText="Volver" onConfirm={() => transicion(() => presentarPresupuesto(id))}>
         <Button type="primary" disabled={ocupado || !p.detalle?.length}>Presentar</Button></Popconfirm>}
       {solicitudAbierta && ultimaVersion && !hayBorrador && ["presentado", "rechazado"].includes(p.estado) && <Button loading={ocupado} onClick={async () => {
         const respuesta = await ejecutar(() => versionarPresupuesto(id), "Versión creada."); if (respuesta.ok) navigate(`/presupuestos/${respuesta.datos.id_presupuesto}`);
@@ -115,7 +124,7 @@ export default function Presupuesto() {
         if (respuesta.ok) { setCabecera(false); consulta.recargar(); }
       }}>
         <Form.Item name="validez_dias" label="Validez en días" rules={[{ required: true }, { type: "integer", min: 1 }]}><InputNumber min={1} precision={0} /></Form.Item>
-        <Form.Item name="observaciones" label="Observaciones"><Input.TextArea rows={3} /></Form.Item>
+        <Form.Item name="observaciones" label="Observaciones" extra="El cliente las ve en su link."><Input.TextArea rows={3} /></Form.Item>
       </Form>
     </Modal>
     {aceptar && <EditorEvento titulo="Confirmar evento" datos={p.solicitud || {}} operacion={(body) => aceptarPresupuesto(id, body)} cerrar={() => setAceptar(false)}

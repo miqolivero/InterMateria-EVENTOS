@@ -464,6 +464,17 @@ const MENSAJES_EMPLEADO = {
   noEncontrado: "Servicio no encontrado"
 };
 
+// La fecha de confirmacion: se pone hoy al confirmar (si ya estaba
+// confirmado o completado, se conserva), se completa si se salta
+// directo a completado y se limpia si vuelve a pendiente o rechaza.
+// En el SET, estado_proveedor todavia es el valor viejo. El ::varchar
+// evita que PostgreSQL deduzca dos tipos para el mismo parametro.
+export const setEstadoProveedor = (n) => `estado_proveedor = $${n},
+  fecha_confirmacion_proveedor = CASE
+    WHEN $${n}::varchar = 'confirmado' AND estado_proveedor NOT IN ('confirmado', 'completado') THEN CURRENT_DATE
+    WHEN $${n}::varchar IN ('confirmado', 'completado') THEN COALESCE(fecha_confirmacion_proveedor, CURRENT_DATE)
+    ELSE NULL END`;
+
 // PATCH /api/servicios-evento/:id/estado
 // Reemplaza al PATCH /:id de la Fase 6. Sin motivo y sin historial. Las
 // transiciones son libres entre los 4 estados; lo unico que se exige es que
@@ -502,18 +513,8 @@ export const cambiarEstadoProveedor = async (req, res) => {
     const sets = [];
     const valores = [];
     if (vino("estado_proveedor")) {
-      // La fecha de confirmacion: se pone hoy al confirmar (si ya estaba
-      // confirmado o completado, se conserva), se completa si se salta
-      // directo a completado y se limpia si vuelve a pendiente o rechaza.
-      // En el SET, estado_proveedor todavia es el valor viejo. El ::varchar
-      // evita que PostgreSQL deduzca dos tipos para el mismo parametro.
       valores.push(body.estado_proveedor);
-      const n = valores.length;
-      sets.push(`estado_proveedor = $${n}`);
-      sets.push(`fecha_confirmacion_proveedor = CASE
-        WHEN $${n}::varchar = 'confirmado' AND estado_proveedor NOT IN ('confirmado', 'completado') THEN CURRENT_DATE
-        WHEN $${n}::varchar IN ('confirmado', 'completado') THEN COALESCE(fecha_confirmacion_proveedor, CURRENT_DATE)
-        ELSE NULL END`);
+      sets.push(setEstadoProveedor(valores.length));
     }
     if (vino("observaciones")) {
       valores.push(body.observaciones ?? null);

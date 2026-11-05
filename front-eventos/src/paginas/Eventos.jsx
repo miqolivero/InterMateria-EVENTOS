@@ -1,12 +1,14 @@
 import { useCallback, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { Badge, Button, Calendar, Card, DatePicker, Descriptions, Input, Select, Skeleton, Space, Table, Tabs } from "antd";
 import { listarEventos, obtenerEvento, editarEvento, iniciarPreparacion, resumenEvento } from "../servicios/operacionService.js";
 import { listarCatalogo } from "../servicios/catalogosService.js";
 import { useConsulta } from "../contexto/useConsulta.js";
 import { useAccion } from "../contexto/useAccion.js";
+import { useFiltros } from "../contexto/useFiltros.js";
 import { fechaAPI, nombreCompleto } from "../utils/formularios.js";
 import { formatearFecha, formatearMoneda } from "../utils/formato.js";
+import { ordenFecha } from "../utils/tablas.js";
 import EncabezadoPagina from "../componentes/EncabezadoPagina";
 import ErrorConsulta from "../componentes/ErrorConsulta";
 import EstadoTag from "../componentes/EstadoTag";
@@ -17,32 +19,38 @@ import CierreEvento from "../componentes/CierreEvento";
 import Indicadores from "../componentes/Indicadores";
 import RevisionesPendientes from "../componentes/RevisionesPendientes";
 import HistorialCambios from "../componentes/HistorialCambios";
+import EventosPorEstado from "../componentes/EventosPorEstado";
+import LimpiarFiltros from "../componentes/LimpiarFiltros";
 
 export default function Eventos() {
-  const [filtros, setFiltros] = useState({});
+  // La pestaña va en la URL: Seguimiento entra directo a "Por estado"
+  const [parametros, setParametros] = useSearchParams();
+  const vista = ["calendario", "estado"].includes(parametros.get("vista")) ? parametros.get("vista") : "lista";
+  const { filtros, setFiltros, filtrar, limpiar, hayFiltros, clave } = useFiltros();
   const consulta = useConsulta(useCallback(async () => (await listarEventos(filtros)).data, [filtros]));
   const empleados = useConsulta(useCallback(async () => (await listarCatalogo("empleados")).data, []));
-  const filtrar = (clave, valor) => setFiltros((v) => ({ ...v, [clave]: valor }));
   const tabla = <Table rowKey="id_evento" dataSource={consulta.datos || []} loading={consulta.cargando} scroll={{ x: 900 }} columns={[
     { title: "Cliente", dataIndex: "nombre_cliente" }, { title: "Tipo", dataIndex: "nombre_tipo_evento" },
-    { title: "Fecha", dataIndex: "fecha_evento_confirmada", render: formatearFecha }, { title: "Sede", dataIndex: "sede_acordada" },
+    { title: "Fecha", dataIndex: "fecha_evento_confirmada", render: formatearFecha, ...ordenFecha("fecha_evento_confirmada") }, { title: "Sede", dataIndex: "sede_acordada" },
     { title: "Coordinador", dataIndex: "nombre_coordinador", render: (v) => v || "Sin asignar" },
     { title: "Estado", dataIndex: "estado", render: (v) => <EstadoTag estado={v} /> },
     { title: "", key: "ver", render: (_, e) => <Link to={`/eventos/${e.id_evento}`}>Ver evento</Link> }
   ]} />;
   return <>
     <EncabezadoPagina titulo="Eventos" /><ErrorConsulta {...consulta} /><ErrorConsulta {...empleados} />
-    <Card><div className="barra-tabla"><Input.Search allowClear placeholder="Buscar cliente" style={{ maxWidth: 250 }} onSearch={(v) => filtrar("buscar", v)} />
+    {/* "Por estado" también lista solicitudes y tiene sus propios filtros */}
+    <Card>{vista !== "estado" && <div className="barra-tabla" key={clave}><Input.Search allowClear placeholder="Buscar cliente" style={{ maxWidth: 250 }} onSearch={(v) => filtrar("buscar", v)} />
       <Space wrap><Select placeholder="Estado" allowClear style={{ width: 180 }} onChange={(v) => filtrar("estado", v)}
         options={["confirmado", "en_preparacion", "realizado", "cancelado"].map((value) => ({ value, label: <EstadoTag estado={value} /> }))} />
         <Select placeholder="Coordinador" allowClear showSearch optionFilterProp="label" style={{ width: 210 }} loading={empleados.cargando}
           options={(empleados.datos || []).map((e) => ({ value: e.id_empleado, label: nombreCompleto(e) }))} onChange={(v) => filtrar("id_coordinador", v)} />
         <DatePicker.RangePicker format="DD/MM/YYYY" onChange={(r) => setFiltros((v) => ({ ...v, desde: fechaAPI(r?.[0]), hasta: fechaAPI(r?.[1]) }))} />
-      </Space></div>
-      <Tabs type="card" items={[{ key: "lista", label: "Listado", children: tabla }, { key: "calendario", label: "Calendario", children: <>
+        <LimpiarFiltros activo={hayFiltros} alTocar={limpiar} />
+      </Space></div>}
+      <Tabs type="card" activeKey={vista} onChange={(v) => setParametros(v === "lista" ? {} : { vista: v }, { replace: true })} items={[{ key: "lista", label: "Listado", children: tabla }, { key: "calendario", label: "Calendario", children: <>
         {consulta.cargando ? <Skeleton active /> : <Calendar cellRender={(fecha, info) => info.type === "date" ?
           <div>{(consulta.datos || []).filter((e) => e.fecha_evento_confirmada === fecha.format("YYYY-MM-DD")).map((e) => <div key={e.id_evento}><Link to={`/eventos/${e.id_evento}`}>{e.nombre_cliente}</Link></div>)}</div> : info.originNode} />}
-      </> }]} />
+      </> }, { key: "estado", label: "Por estado", children: <EventosPorEstado /> }]} />
     </Card>
   </>;
 }

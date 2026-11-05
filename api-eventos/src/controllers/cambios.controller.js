@@ -1,5 +1,7 @@
 import pool from "../data/db.js";
 import { responderError } from "../utils/errores.js";
+import { esEmpleadoActivo } from "../utils/consultas.js";
+import { esFechaValida } from "../utils/validaciones.js";
 import {
   tieneTexto,
   selectCambio,
@@ -12,21 +14,90 @@ import {
   JOIN_INDICADORES,
   COLUMNAS_INDICADORES,
   servicioARevisar,
-  servicioPendientesRevision
+  servicioPendientesRevision,
+  plazoTerminado
 } from "../utils/indicadores.js";
 import { ESTADOS_EVENTO_ABIERTO, MENSAJE_EVENTO_CERRADO, SELECT_SERVICIO_EVENTO } from "./eventos.controller.js";
-import { SELECT_TAREA, ORDEN_TAREAS, responsableObligatorio } from "./tareas.controller.js";
+import { SELECT_TAREA, ORDEN_TAREAS, ESTADOS_TAREA, responsableObligatorio, aplicarEstadoTarea } from "./tareas.controller.js";
+import { ESTADOS_PROVEEDOR, setEstadoProveedor } from "./serviciosEvento.controller.js";
 
 // Fase 11: lo que se lee del historial de cambios y de los compromisos a
 // revisar, y el resumen del evento (la vista completa, tambien para el
-// empleado). Revisar es lo unico que se escribe aca, y solo deja constancia:
-// no toca la tarea ni el proveedor.
+// empleado). Revisar es lo unico que se escribe aca: deja constancia y, si la
+// persona lo indica, actualiza el compromiso.
 
 const MENSAJES = {
   eventoNoEncontrado: "Evento no encontrado",
   revisionNoEncontrada: "Revision no encontrada",
   notaObligatoria: "La nota de revision es obligatoria",
-  yaRevisado: "Ya fue revisado"
+  yaRevisado: "Ya fue revisado",
+  soloEstado: "Solo podes actualizar el estado",
+  estadoInvalido: "Estado invalido",
+  fechaInvalida: "La fecha prevista no es valida",
+  camposAjenos: "Esos datos no corresponden a lo que se esta revisando",
+  responsableInvalido: "El responsable no es un empleado activo de la empresa",
+  plazoTerminado: "El evento ya paso y la tarea no se puede modificar: solo se puede dejar la nota",
+  servicioCancelado: "El servicio esta cancelado",
+  sinProveedor: "El servicio no tiene proveedor asignado"
+};
+
+const ETIQUETAS_ESTADO = {
+  pendiente: "Pendiente", en_curso: "En curso", completada: "Completada",
+  confirmado: "Confirmado", completado: "Completado", rechazado: "Rechazado"
+};
+const fechaLegible = (fecha) => fecha ? fecha.split("-").reverse().join("/") : "sin fecha";
+
+// Actualiza la tarea de una revision. Devuelve el texto de lo que cambio, o un
+// error [status, mensaje]. Lo que ya tiene ese valor no cuenta como cambio.
+const actualizarTarea = async (client, afectado, body, idEmpresa, idUsuario) => {
+  const { fecha_prevista: fecha, id_empleado_responsable: responsable, estado_tarea: estado } = body;
+  const cambiaFecha = fecha != null && fecha !== afectado.fecha_actual;
+  const cambiaResponsable = responsable != null && Number(responsable) !== afectado.responsable_actual;
+  const cambiaEstado = estado != null && estado !== afectado.estado_actual;
+  if (!cambiaFecha && !cambiaResponsable && !cambiaEstado) return { texto: null };
+  if (afectado.plazo_terminado) return { error: [409, MENSAJES.plazoTerminado] };
+
+  const partes = [];
+  if (cambiaResponsable) {
+    if (!(await esEmpleadoActivo(client, responsable, idEmpresa))) return { error: [400, MENSAJES.responsableInvalido] };
+    const nombres = await client.query(
+      `SELECT (SELECT nombre || ' ' || apellido FROM empleados WHERE id_empleado = $1::int) AS anterior,
+              (SELECT nombre || ' ' || apellido FROM empleados WHERE id_empleado = $2::int) AS nuevo`,
+      [afectado.responsable_actual, responsable]
+    );
+    partes.push(`Responsable: ${nombres.rows[0].anterior ?? "sin asignar"} → ${nombres.rows[0].nuevo}`);
+  }
+  if (cambiaFecha) partes.push(`Fecha prevista: ${fechaLegible(afectado.fecha_actual)} → ${fechaLegible(fecha)}`);
+  if (cambiaEstado) partes.push(`Estado: ${ETIQUETAS_ESTADO[afectado.estado_actual]} → ${ETIQUETAS_ESTADO[estado]}`);
+
+  // El estado primero: mover la fecha antes podria reabrir un plazo terminado
+  if (cambiaEstado && !(await aplicarEstadoTarea(client, afectado.id_tarea, estado, idUsuario))) {
+    return { error: [409, MENSAJE_EVENTO_CERRADO] };
+  }
+  if (cambiaFecha || cambiaResponsable) {
+    await client.query(
+      `UPDATE tareas SET fecha_prevista = COALESCE($1::date, fecha_prevista),
+                          id_empleado_responsable = COALESCE($2::int, id_empleado_responsable)
+       WHERE id_tarea = $3`,
+      [cambiaFecha ? fecha : null, cambiaResponsable ? responsable : null, afectado.id_tarea]
+    );
+  }
+  return { texto: partes.join(" · ") };
+};
+
+// Actualiza el proveedor de una revision: solo su estado. Cambiar de proveedor o
+// los importes es otro cambio de lo acordado, con su motivo.
+const actualizarServicio = async (client, afectado, estado) => {
+  if (estado == null || estado === afectado.estado_proveedor) return { texto: null };
+  if (afectado.estado_servicio === "cancelado") return { error: [409, MENSAJES.servicioCancelado] };
+  if (["confirmado", "completado"].includes(estado) && afectado.id_proveedor === null) {
+    return { error: [409, MENSAJES.sinProveedor] };
+  }
+  await client.query(
+    `UPDATE servicios_x_evento SET ${setEstadoProveedor(1)} WHERE id_servicio_x_evento = $2`,
+    [estado, afectado.id_servicio_x_evento]
+  );
+  return { texto: `Estado del proveedor: ${ETIQUETAS_ESTADO[afectado.estado_proveedor]} → ${ETIQUETAS_ESTADO[estado]}` };
 };
 
 const TIPOS_CAMBIO = [
@@ -105,16 +176,31 @@ export const obtenerRevisiones = async (req, res) => {
 
 // PATCH /api/revisiones/:id
 // Deja constancia de que un compromiso afectado se reviso: quien, cuando y
-// una nota obligatoria ("dejar constancia", pidio el cliente). NO cambia
-// nada mas: si hay que mover la tarea o cambiar el proveedor, se hace con sus
-// propios endpoints. Con el evento cerrado no se modifica, como todo lo demas.
+// una nota obligatoria ("dejar constancia", pidio el cliente). En la misma
+// transaccion puede actualizar el compromiso, si la persona lo indica:
+//   - una tarea: fecha_prevista, id_empleado_responsable, estado_tarea;
+//   - un servicio: estado_proveedor.
+// El empleado solo actualiza estados. Con el evento cerrado no se modifica,
+// como todo lo demas.
 export const revisarAfectado = async (req, res) => {
   const { id_empresa: idEmpresa } = req.usuario;
   const idEmpleado = responsableObligatorio(req.usuario);
-  const nota = req.body?.nota_revision;
+  const body = req.body ?? {};
+  const nota = body.nota_revision;
 
   if (!tieneTexto(nota)) {
     return res.status(400).json({ mensaje: MENSAJES.notaObligatoria });
+  }
+  // El 403 va antes que la base, asi no revela si la revision existe
+  if (idEmpleado !== null && (body.fecha_prevista != null || body.id_empleado_responsable != null)) {
+    return res.status(403).json({ mensaje: MENSAJES.soloEstado });
+  }
+  if ((body.estado_tarea != null && !ESTADOS_TAREA.includes(body.estado_tarea))
+    || (body.estado_proveedor != null && !ESTADOS_PROVEEDOR.includes(body.estado_proveedor))) {
+    return res.status(400).json({ mensaje: MENSAJES.estadoInvalido });
+  }
+  if (body.fecha_prevista != null && !esFechaValida(body.fecha_prevista)) {
+    return res.status(400).json({ mensaje: MENSAJES.fechaInvalida });
   }
 
   const client = await pool.connect();
@@ -124,11 +210,16 @@ export const revisarAfectado = async (req, res) => {
     // Bloqueado: si dos personas revisan lo mismo a la vez, la segunda ve que
     // ya esta revisado y recibe 409
     const { rows } = await client.query(
-      `SELECT ac.revisado, e.estado AS estado_evento
+      `SELECT ac.revisado, ac.id_tarea, ac.id_servicio_x_evento, e.estado AS estado_evento,
+              to_char(tr.fecha_prevista, 'YYYY-MM-DD') AS fecha_actual,
+              tr.id_empleado_responsable AS responsable_actual, tr.estado_tarea AS estado_actual,
+              ${plazoTerminado("tr")} AS plazo_terminado,
+              sxr.id_proveedor, sxr.estado_proveedor, sxr.estado_servicio
        FROM afectados_cambio ac
        JOIN cambios_evento ce ON ce.id_cambio = ac.id_cambio
        JOIN eventos e ON e.id_evento = ce.id_evento
        LEFT JOIN tareas tr ON tr.id_tarea = ac.id_tarea
+       LEFT JOIN servicios_x_evento sxr ON sxr.id_servicio_x_evento = ac.id_servicio_x_evento
        WHERE ac.id_afectado = $1 AND e.id_empresa = $2
          AND ${condicionRevisionDelEmpleado(3)}
        FOR UPDATE OF ac`,
@@ -140,6 +231,18 @@ export const revisarAfectado = async (req, res) => {
     if (!afectado) error = [404, MENSAJES.revisionNoEncontrada];
     else if (!ESTADOS_EVENTO_ABIERTO.includes(afectado.estado_evento)) error = [409, MENSAJE_EVENTO_CERRADO];
     else if (afectado.revisado) error = [409, MENSAJES.yaRevisado];
+    else if (afectado.id_tarea ? body.estado_proveedor != null
+      : body.fecha_prevista != null || body.id_empleado_responsable != null || body.estado_tarea != null) {
+      error = [400, MENSAJES.camposAjenos];
+    }
+
+    let actualizado = {};
+    if (!error) {
+      actualizado = afectado.id_tarea
+        ? await actualizarTarea(client, afectado, body, idEmpresa, req.usuario.id)
+        : await actualizarServicio(client, afectado, body.estado_proveedor);
+      error = actualizado.error ?? null;
+    }
 
     if (error) {
       await client.query("ROLLBACK");
@@ -149,9 +252,9 @@ export const revisarAfectado = async (req, res) => {
     await client.query(
       `UPDATE afectados_cambio
        SET revisado = TRUE, id_usuario_revision = $1, fecha_revision = NOW(),
-           nota_revision = $2
-       WHERE id_afectado = $3`,
-      [req.usuario.id, nota.trim(), req.params.id]
+           nota_revision = $2, cambios_revision = $3
+       WHERE id_afectado = $4`,
+      [req.usuario.id, nota.trim(), actualizado.texto, req.params.id]
     );
 
     const revision = await client.query(`${SELECT_REVISION} WHERE ac.id_afectado = $1`, [req.params.id]);

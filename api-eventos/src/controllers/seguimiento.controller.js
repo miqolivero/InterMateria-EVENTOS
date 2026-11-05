@@ -2,6 +2,7 @@ import pool from "../data/db.js";
 import { responderError } from "../utils/errores.js";
 import { esEnteroPositivo, esFechaValida } from "../utils/validaciones.js";
 import {
+  CONDICION_SIN_REALIZAR,
   SERVICIO_SIN_CONFIRMAR,
   JOIN_INDICADORES,
   COLUMNAS_INDICADORES,
@@ -23,9 +24,10 @@ import {
 // que se ve en el tablero sale de la misma consulta que se puede revisar a mano.
 //
 // Siempre sobre eventos ABIERTOS (confirmado o en_preparacion) de la empresa
-// del token. ?dias (por defecto 30) define la ventana de los "proximos"; las
-// tareas vencidas y los servicios sin confirmar son de TODOS los eventos
-// abiertos, asi el numero de cada tarjeta coincide con el largo de su lista.
+// del token. ?dias filtra todo el tablero: tarjetas y listas miran los eventos que
+// son de aca a esos dias, asi el numero de cada tarjeta coincide con su lista.
+// Los abiertos con la fecha ya pasada cuentan siempre: son lo mas urgente. Sin
+// ?dias, las tarjetas y las listas miran todos los abiertos.
 
 const DIAS_POR_DEFECTO = 30;
 const DIAS_MAXIMO = 365;
@@ -41,6 +43,14 @@ const leerDias = (query) =>
 // rechazado, o sin proveedor. La definicion vive en utils/indicadores.js, la
 // misma que usa el resumen del evento.
 const CONDICION_SIN_CONFIRMAR = SERVICIO_SIN_CONFIRMAR;
+
+// ?dias si vino bien; si no, null (sin ventana)
+const leerVentana = (query) =>
+  esEnteroPositivo(query.dias) && Number(query.dias) <= DIAS_MAXIMO ? Number(query.dias) : null;
+
+// El evento (o la solicitud) entra en la ventana del tablero. $n es la ventana.
+const enVentana = (n, columna = "e.fecha_evento_confirmada") =>
+  `($${n}::int IS NULL OR ${columna} <= CURRENT_DATE + $${n}::int)`;
 
 // Proximo = abierto y con fecha entre hoy y hoy + dias ($2)
 const CONDICION_PROXIMO = `e.fecha_evento_confirmada
@@ -62,23 +72,27 @@ export const obtenerResumen = async (req, res) => {
             AND ${CONDICION_PROXIMO}) AS eventos_proximos,
          (SELECT COUNT(*) FILTER (WHERE ${CONDICION_VENCIDA})::int
           FROM tareas t JOIN eventos e ON e.id_evento = t.id_evento
-          WHERE e.id_empresa = $1 AND e.estado = ANY($3)) AS tareas_vencidas,
-         (SELECT COUNT(*) FILTER (WHERE t.estado_tarea <> 'completada')::int
+          WHERE e.id_empresa = $1 AND e.estado = ANY($3) AND ${enVentana(4)}) AS tareas_vencidas,
+         (SELECT COUNT(*) FILTER (WHERE t.estado_tarea <> 'completada' AND NOT ${CONDICION_SIN_REALIZAR})::int
           FROM tareas t JOIN eventos e ON e.id_evento = t.id_evento
-          WHERE e.id_empresa = $1 AND e.estado = ANY($3)) AS tareas_pendientes,
+          WHERE e.id_empresa = $1 AND e.estado = ANY($3) AND ${enVentana(4)}) AS tareas_pendientes,
+         (SELECT COUNT(*) FILTER (WHERE ${CONDICION_SIN_REALIZAR})::int
+          FROM tareas t JOIN eventos e ON e.id_evento = t.id_evento
+          WHERE e.id_empresa = $1 AND e.estado = ANY($3) AND ${enVentana(4)}) AS tareas_sin_realizar,
          (SELECT COUNT(*)::int
           FROM servicios_x_evento sxe JOIN eventos e ON e.id_evento = sxe.id_evento
-          WHERE e.id_empresa = $1 AND e.estado = ANY($3)
+          WHERE e.id_empresa = $1 AND e.estado = ANY($3) AND ${enVentana(4)}
             AND ${CONDICION_SIN_CONFIRMAR}) AS servicios_sin_confirmar,
          (SELECT COUNT(*)::int FROM solicitudes
-          WHERE id_empresa = $1 AND estado = 'pendiente') AS solicitudes_pendientes,
+          WHERE id_empresa = $1 AND estado = 'pendiente'
+            AND ${enVentana(4, "fecha_evento_prevista")}) AS solicitudes_pendientes,
          (SELECT COUNT(*)::int
           FROM afectados_cambio ac
           JOIN cambios_evento ce ON ce.id_cambio = ac.id_cambio
           JOIN eventos e ON e.id_evento = ce.id_evento
-          WHERE e.id_empresa = $1 AND e.estado = ANY($3)
+          WHERE e.id_empresa = $1 AND e.estado = ANY($3) AND ${enVentana(4)}
             AND ac.revisado = FALSE) AS pendientes_revision`,
-      [req.usuario.id_empresa, dias, ESTADOS_EVENTO_ABIERTO]
+      [req.usuario.id_empresa, dias, ESTADOS_EVENTO_ABIERTO, leerVentana(req.query)]
     );
 
     res.json(resultado.rows[0]);
@@ -103,7 +117,7 @@ export const obtenerProximosEventos = async (req, res) => {
               te.nombre AS nombre_tipo_evento,
               e.fecha_evento_confirmada,
               e.fecha_evento_confirmada - CURRENT_DATE AS dias_restantes,
-              e.estado,
+              e.estado, e.sede_acordada,
               emp.nombre || ' ' || emp.apellido AS nombre_coordinador,
               ${COLUMNAS_INDICADORES}
        FROM eventos e
@@ -138,10 +152,10 @@ export const obtenerTareasVencidas = async (req, res) => {
 
     const resultado = await pool.query(
       `${consulta}
-       WHERE e.id_empresa = $1 AND e.estado = ANY($2)
+       WHERE e.id_empresa = $1 AND e.estado = ANY($2) AND ${enVentana(3)}
          AND ${CONDICION_VENCIDA}
        ORDER BY dias_vencida DESC, t.id_tarea`,
-      [req.usuario.id_empresa, ESTADOS_EVENTO_ABIERTO]
+      [req.usuario.id_empresa, ESTADOS_EVENTO_ABIERTO, leerVentana(req.query)]
     );
 
     res.json(resultado.rows);
@@ -172,10 +186,10 @@ export const obtenerServiciosSinConfirmar = async (req, res) => {
        JOIN clientes c ON c.id_cliente = s.id_cliente
        JOIN servicios sv ON sv.id_servicio = sxe.id_servicio
        LEFT JOIN proveedores pr ON pr.id_proveedor = sxe.id_proveedor
-       WHERE e.id_empresa = $1 AND e.estado = ANY($2)
+       WHERE e.id_empresa = $1 AND e.estado = ANY($2) AND ${enVentana(3)}
          AND ${CONDICION_SIN_CONFIRMAR}
        ORDER BY dias_para_evento, sxe.id_servicio_x_evento`,
-      [req.usuario.id_empresa, ESTADOS_EVENTO_ABIERTO]
+      [req.usuario.id_empresa, ESTADOS_EVENTO_ABIERTO, leerVentana(req.query)]
     );
 
     res.json(resultado.rows);
@@ -240,7 +254,8 @@ export const obtenerPorEstado = async (req, res) => {
                 CONCAT_WS(' ', c.nombre, NULLIF(c.apellido, '-')) AS nombre_cliente,
                 te.nombre AS nombre_tipo_evento,
                 e.fecha_evento_confirmada AS fecha,
-                NULL::int AS id_presupuesto_presentado
+                NULL::int AS id_presupuesto_presentado,
+                NULL::varchar AS respuesta_cliente
          FROM eventos e
          JOIN solicitudes s ON s.id_solicitud = e.id_solicitud
          JOIN clientes c ON c.id_cliente = s.id_cliente
@@ -254,12 +269,13 @@ export const obtenerPorEstado = async (req, res) => {
                 CONCAT_WS(' ', c.nombre, NULLIF(c.apellido, '-')),
                 te.nombre,
                 s.fecha_evento_prevista,
-                pp.id_presupuesto
+                pp.id_presupuesto,
+                pp.respuesta_cliente
          FROM solicitudes s
          JOIN clientes c ON c.id_cliente = s.id_cliente
          JOIN tipos_eventos te ON te.id_tipo_evento = s.id_tipo_evento
          LEFT JOIN LATERAL (
-           SELECT p.id_presupuesto FROM presupuestos p
+           SELECT p.id_presupuesto, p.respuesta_cliente FROM presupuestos p
            WHERE p.id_solicitud = s.id_solicitud AND p.estado = 'presentado'
            ORDER BY p.numero_version DESC LIMIT 1
          ) pp ON TRUE

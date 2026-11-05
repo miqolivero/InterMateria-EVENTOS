@@ -1,39 +1,47 @@
 import { useCallback, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
-import { Button, Card, DatePicker, Descriptions, Input, Popconfirm, Select, Skeleton, Space, Table } from "antd";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Alert, Button, Card, DatePicker, Descriptions, Input, Popconfirm, Select, Skeleton, Space, Table, Tag } from "antd";
 import { listarSolicitudes, obtenerSolicitud, cambiarEstadoSolicitud, crearPresupuesto } from "../servicios/operacionService.js";
 import { listarCatalogo } from "../servicios/catalogosService.js";
 import { useConsulta } from "../contexto/useConsulta.js";
 import { useAccion } from "../contexto/useAccion.js";
+import { useFiltros } from "../contexto/useFiltros.js";
 import { fechaAPI, nombreCompleto } from "../utils/formularios.js";
 import { formatearFecha, formatearMoneda } from "../utils/formato.js";
+import { ordenFecha } from "../utils/tablas.js";
 import EncabezadoPagina from "../componentes/EncabezadoPagina";
 import EstadoTag from "../componentes/EstadoTag";
+import LimpiarFiltros from "../componentes/LimpiarFiltros";
 import ErrorConsulta from "../componentes/ErrorConsulta";
 import EditorSolicitud from "../componentes/EditorSolicitud";
 
 const opcionesEstado = ["pendiente", "presupuestada", "aceptada", "rechazada", "cancelada"].map((value) => ({ value, label: value[0].toUpperCase() + value.slice(1) }));
 
 export default function Solicitudes() {
-  const [filtros, setFiltros] = useState({});
+  // Desde una tarjeta de Seguimiento se entra con el estado y la fecha en la URL
+  const [parametros] = useSearchParams();
+  const estadoInicial = opcionesEstado.some((o) => o.value === parametros.get("estado")) ? parametros.get("estado") : undefined;
+  const { filtros, setFiltros, filtrar, limpiar, hayFiltros, clave } = useFiltros({ estado: estadoInicial, hasta: parametros.get("hasta") || undefined });
   const [editor, setEditor] = useState(false);
   const consulta = useConsulta(useCallback(async () => (await listarSolicitudes(filtros)).data, [filtros]));
   const clientes = useConsulta(useCallback(async () => (await listarCatalogo("clientes")).data, []));
   const navigate = useNavigate();
-  const filtrar = (clave, valor) => setFiltros((actual) => ({ ...actual, [clave]: valor }));
   return <>
     <EncabezadoPagina titulo="Solicitudes" acciones={<Button type="primary" onClick={() => setEditor(true)}>Nueva solicitud</Button>} />
     <ErrorConsulta {...consulta} /><ErrorConsulta {...clientes} />
-    <Card><div className="barra-tabla">
+    {filtros.hasta && parametros.get("hasta") === filtros.hasta && <Alert type="info" showIcon closable className="aviso-formulario" onClose={() => filtrar("hasta", undefined)}
+      title={`Desde Seguimiento: solicitudes con fecha prevista hasta el ${formatearFecha(filtros.hasta)}. Cerrá este aviso para ver todas.`} />}
+    <Card><div className="barra-tabla" key={clave}>
       <Input.Search placeholder="Buscar cliente" allowClear onSearch={(v) => filtrar("buscar", v)} style={{ maxWidth: 250 }} />
-      <Space wrap><Select placeholder="Estado" allowClear options={opcionesEstado} onChange={(v) => filtrar("estado", v)} style={{ width: 150 }} />
+      <Space wrap><Select placeholder="Estado" allowClear options={opcionesEstado} defaultValue={filtros.estado} onChange={(v) => filtrar("estado", v)} style={{ width: 150 }} />
         <Select placeholder="Cliente" allowClear showSearch optionFilterProp="label" loading={clientes.cargando} style={{ width: 220 }}
           options={(clientes.datos || []).map((c) => ({ value: c.id_cliente, label: nombreCompleto(c) }))} onChange={(v) => filtrar("id_cliente", v)} />
         <DatePicker.RangePicker format="DD/MM/YYYY" onChange={(rango) => setFiltros((v) => ({ ...v, desde: fechaAPI(rango?.[0]), hasta: fechaAPI(rango?.[1]) }))} />
+        <LimpiarFiltros activo={hayFiltros} alTocar={limpiar} />
       </Space>
     </div><Table rowKey="id_solicitud" loading={consulta.cargando} dataSource={consulta.datos || []} scroll={{ x: 800 }} columns={[
       { title: "Cliente", dataIndex: "nombre_cliente" }, { title: "Tipo", dataIndex: "nombre_tipo_evento" },
-      { title: "Fecha prevista", dataIndex: "fecha_evento_prevista", render: formatearFecha }, { title: "Asistentes", dataIndex: "cantidad_asistentes" },
+      { title: "Fecha prevista", dataIndex: "fecha_evento_prevista", render: formatearFecha, ...ordenFecha("fecha_evento_prevista") }, { title: "Asistentes", dataIndex: "cantidad_asistentes" },
       { title: "Estado", dataIndex: "estado", render: (v) => <EstadoTag estado={v} /> },
       { title: "", key: "ver", render: (_, fila) => <Link to={`/solicitudes/${fila.id_solicitud}`}>Ver solicitud</Link> }
     ]} /></Card>
@@ -54,7 +62,7 @@ export function SolicitudDetalle() {
   return <>
     <Link to="/solicitudes" className="enlace-volver">Volver a solicitudes</Link>
     <EncabezadoPagina titulo={`Solicitud #${id}`} acciones={<Space wrap><EstadoTag estado={solicitud.estado} />
-      {editable && <Button onClick={() => setEditor(true)}>Editar</Button>}
+      {editable && <Button onClick={() => setEditor(true)}>Editar solicitud</Button>}
       {solicitud.id_evento && <Link to={`/eventos/${solicitud.id_evento}`}><Button>Ver evento</Button></Link>}
     </Space>} />
     <Card><Descriptions column={{ xs: 1, md: 2 }} items={[
@@ -75,10 +83,11 @@ export function SolicitudDetalle() {
           así se ve de un vistazo cuál vale. El Tag explica cada estado. */}
       <Table rowKey="id_presupuesto" dataSource={solicitud.presupuestos || []} pagination={false} scroll={{ x: 550 }}
         rowClassName={(p) => p.estado === "aceptado" ? "fila-destacada" : ["reemplazado", "rechazado"].includes(p.estado) ? "fila-historica" : ""} columns={[
-        { title: "Versión", dataIndex: "numero_version", render: (v, p) => p.estado === "aceptado" ? <strong>Versión {v} · la que vale</strong> : `Versión ${v}` }, { title: "Fecha", dataIndex: "fecha_emision", render: formatearFecha },
+        { title: "Versión", dataIndex: "numero_version", render: (v, p) => p.estado === "aceptado" ? <strong>Versión {v} · la que vale</strong> : `Versión ${v}` }, { title: "Fecha", dataIndex: "fecha_emision", render: formatearFecha, ...ordenFecha("fecha_emision") },
         { title: "Total", dataIndex: "importe_total", render: formatearMoneda },
-        { title: "Estado", dataIndex: "estado", render: (v) => <EstadoTag estado={v} /> },
-        { title: "", key: "ver", render: (_, p) => <Link to={`/presupuestos/${p.id_presupuesto}`}>Ver presupuesto</Link> }
+        { title: "Estado", dataIndex: "estado", render: (v, p) => <Space size={4} wrap><EstadoTag estado={v} />
+          {p.estado === "presentado" && p.respuesta_cliente && <Tag color={p.respuesta_cliente === "aceptado" ? "green" : "red"}>El cliente {p.respuesta_cliente === "aceptado" ? "aceptó" : "rechazó"}</Tag>}</Space> },
+        { title: "", key: "ver", render: (_, p) => <Link to={`/presupuestos/${p.id_presupuesto}`}>{p.estado === "borrador" ? <Button type="primary" size="small">Editar presupuesto</Button> : "Ver presupuesto"}</Link> }
       ]} />
     </Card>
     {editable && <Space style={{ marginTop: 20 }}>{["rechazada", "cancelada"].map((estado) => <Popconfirm key={estado} title={estado === "rechazada" ? "¿Rechazar solicitud?" : "¿Cancelar solicitud?"} okText="Confirmar" cancelText="Volver" onConfirm={async () => {

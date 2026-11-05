@@ -11,6 +11,7 @@ function Avisos({ i }) {
     {i.servicios_sin_confirmar > 0 && <Tag color="gold">{i.servicios_sin_confirmar} sin confirmar</Tag>}
     {i.pendientes_revision > 0 && <Tag color="orange">{i.pendientes_revision} a revisar</Tag>}
     {i.tareas_vencidas > 0 && <Tag color="red">{i.tareas_vencidas} vencidas</Tag>}
+    {i.tareas_sin_realizar > 0 && <Tag variant="outlined">{i.tareas_sin_realizar} no realizadas</Tag>}
   </div>;
 }
 

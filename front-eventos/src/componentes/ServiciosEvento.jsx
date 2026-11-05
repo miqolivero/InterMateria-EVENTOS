@@ -8,6 +8,7 @@ import { useConsulta } from "../contexto/useConsulta.js";
 import { useAccion } from "../contexto/useAccion.js";
 import { nombreCompleto, fechaAPI } from "../utils/formularios.js";
 import { formatearFecha, formatearMoneda } from "../utils/formato.js";
+import { ordenFecha } from "../utils/tablas.js";
 import { ESTADOS_PROVEEDOR, PASOS_PROVEEDOR } from "../utils/estados.js";
 import EstadoTag from "./EstadoTag";
 import ErrorConsulta from "./ErrorConsulta";
@@ -112,7 +113,7 @@ export default function ServiciosEvento({ id, editable, actualizado }) {
         {s.a_revisar && <Tag color="orange">A revisar ({s.pendientes_revision})</Tag>}</Space></div> },
     { title: "Proveedor", dataIndex: "nombre_proveedor", render: (v) => v || "Sin asignar" },
     { title: "Estado proveedor", dataIndex: "estado_proveedor", render: (_, s) => <EstadoProveedor servicio={s} editable={editable} actualizado={recargar} /> },
-    { title: "Confirmación", dataIndex: "fecha_confirmacion_proveedor", render: formatearFecha },
+    { title: "Confirmación", dataIndex: "fecha_confirmacion_proveedor", render: formatearFecha, ...ordenFecha("fecha_confirmacion_proveedor") },
     { title: "Cantidad", dataIndex: "cantidad" },
     { title: "Costo", dataIndex: "costo_acordado_proveedor", render: formatearMoneda },
     { title: "Importe cliente", dataIndex: "importe_acordado_cliente", render: formatearMoneda }

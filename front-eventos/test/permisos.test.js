@@ -58,8 +58,7 @@ test("el menú sale de una sola definición y cada rol ve solo lo suyo", async (
     const rutas = (rol) => menuDeRol(rol).map((o) => o.key);
     assert.deepEqual(rutas("superadmin"), ["/superadmin", "/superadmin/empresas"]);
     assert.deepEqual(rutas("empleado"), ["/mis-tareas", "/mis-eventos", "/mi-empresa"]);
-    assert.ok(rutas("coordinador").includes("/eventos-por-estado") && !rutas("empleado").includes("/eventos-por-estado"));
-    assert.equal(opcionDeRuta("/eventos-por-estado").ruta, "/eventos-por-estado");
+    assert.ok(rutas("admin").includes("/tareas") && rutas("coordinador").includes("/tareas") && !rutas("empleado").includes("/tareas"));
     assert.equal(opcionDeRuta("/mis-eventos/4").ruta, "/mis-eventos");
     assert.ok(rutas("admin").includes("/usuarios") && rutas("admin").includes("/personal"));
     assert.ok(!rutas("coordinador").includes("/usuarios") && !rutas("coordinador").includes("/personal"));

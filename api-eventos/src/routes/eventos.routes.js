@@ -18,6 +18,7 @@ import {
   obtenerRevisiones,
   obtenerResumenEvento
 } from "../controllers/cambios.controller.js";
+import { datosEvento, datosTarea, datosRenglon } from "../middlewares/datos.middleware.js";
 import { validarParamId } from "../middlewares/validarId.middleware.js";
 import { permitirRoles } from "../middlewares/auth.middleware.js";
 
@@ -43,13 +44,13 @@ router.get("/", obtenerEventos);
 router.get("/:id", obtenerEventoPorId);
 
 // Fase 11: un cambio registrado, con motivo
-router.put("/:id", editarEvento);
+router.put("/:id", datosEvento, editarEvento);
 router.patch("/:id/iniciar-preparacion", iniciarPreparacion);
 
 // Lo acordado con cada proveedor. Los cambios de cada servicio van por
 // /api/servicios-evento; el alta despues de confirmar, por aca.
 router.get("/:id/servicios", obtenerServiciosDelEvento);
-router.post("/:id/servicios", agregarServicioEvento);
+router.post("/:id/servicios", datosRenglon, agregarServicioEvento);
 
 // Fase 11: historial de cambios
 router.get("/:id/cambios", obtenerCambios);
@@ -57,7 +58,7 @@ router.get("/:id/cambios", obtenerCambios);
 // Fase 6: tareas del evento (los pasos con un proveedor se generan en
 // POST /api/servicios-evento/:id/generar-tareas)
 router.get("/:id/tareas", obtenerTareasDelEvento);
-router.post("/:id/tareas", crearTarea);
+router.post("/:id/tareas", datosTarea, crearTarea);
 
 // Fase 8: cierre (realizado o cancelado) y feedback del cliente
 router.patch("/:id/cerrar", cerrarEvento);

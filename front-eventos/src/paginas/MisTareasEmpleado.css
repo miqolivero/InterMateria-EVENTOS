@@ -16,3 +16,6 @@
 .contacto-proveedor { display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
 .contacto-proveedor a { padding: 4px 0; }
 .formulario-proveedor { margin-top: 4px; }
+.filtro-evento-empleado { width: 100%; margin-bottom: 20px; }
+
+.limpiar-filtros-empleado:not(:empty) { margin-bottom: 12px; }

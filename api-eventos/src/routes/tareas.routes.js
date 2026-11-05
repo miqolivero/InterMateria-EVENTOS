@@ -1,10 +1,13 @@
 import { Router } from "express";
 import {
+  obtenerTareas,
   obtenerMisTareas,
+  obtenerHistorialTarea,
   editarTarea,
   cambiarEstadoTarea,
   eliminarTarea
 } from "../controllers/tareas.controller.js";
+import { datosTarea } from "../middlewares/datos.middleware.js";
 import { validarParamId } from "../middlewares/validarId.middleware.js";
 import { permitirRoles } from "../middlewares/auth.middleware.js";
 
@@ -23,8 +26,12 @@ const operacion = permitirRoles("admin", "coordinador");
 // Va antes que las rutas con :id para que "mias" no se tome como un id
 router.get("/mias", obtenerMisTareas);
 
-router.put("/:id", operacion, editarTarea);
+// Todas las de la empresa: el empleado ve solo las suyas, con "mias"
+router.get("/", operacion, obtenerTareas);
+
+router.put("/:id", operacion, datosTarea, editarTarea);
 router.patch("/:id/estado", cambiarEstadoTarea);
+router.get("/:id/historial", obtenerHistorialTarea);
 
 // Solo tareas libres: las de la secuencia no se borran
 router.delete("/:id", operacion, eliminarTarea);

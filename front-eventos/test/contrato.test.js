@@ -5,6 +5,8 @@ import api from "../src/servicios/axiosConfig.js";
 import * as catalogos from "../src/servicios/catalogosService.js";
 import * as operacion from "../src/servicios/operacionService.js";
 import { camposPermitidos, fechaAPI, opcionesActivos, nombreCompleto } from "../src/utils/formularios.js";
+import { textoDiasRestantes, urgenciaDias } from "../src/utils/formato.js";
+import { ordenFecha } from "../src/utils/tablas.js";
 
 let peticiones;
 beforeEach(() => {
@@ -63,7 +65,7 @@ test("formularios excluyen empresa, ids, estados y campos calculados no editable
 });
 
 test("aceptación, cierre y feedback mantienen las rutas y los campos del contrato final", async () => {
-  const acuerdo = { fecha_evento_confirmada: "2027-11-14", sede_acordada: "Salón", condiciones_acordadas: "Según propuesta", id_empleado_coordinador: null };
+  const acuerdo = { fecha_evento_confirmada: "2027-11-14", id_sede: 1, condiciones_acordadas: "Según propuesta", id_empleado_coordinador: null };
   await operacion.aceptarPresupuesto(2, acuerdo);
   assert.deepEqual(peticiones.at(-1), { metodo: "post", url: "/presupuestos/2/aceptar", params: undefined, body: acuerdo });
   await operacion.editarEvento(1, acuerdo);
@@ -76,6 +78,19 @@ test("aceptación, cierre y feedback mantienen las rutas y los campos del contra
   assert.deepEqual(peticiones.at(-1).body, { feedback_cliente: "Buena atención" });
   await operacion.resumenSeguimiento(15);
   assert.deepEqual(peticiones.at(-1).params, { dias: 15 });
+});
+
+test("ordenar por fecha: cronológico y con las vacías juntas", () => {
+  const { sorter } = ordenFecha("fecha");
+  const filas = [{ fecha: "2026-12-01" }, { fecha: null }, { fecha: "2026-02-15" }, { fecha: "2027-01-10" }];
+  assert.deepEqual([...filas].sort(sorter).map((f) => f.fecha), [null, "2026-02-15", "2026-12-01", "2027-01-10"]);
+});
+
+test("la cuenta regresiva del próximo evento", () => {
+  assert.equal(textoDiasRestantes(0), "Es hoy");
+  assert.equal(textoDiasRestantes(1), "Falta 1 día");
+  assert.equal(textoDiasRestantes(14), "Faltan 14 días");
+  assert.deepEqual([0, 7, 8, 30, 31].map(urgenciaDias), ["alta", "alta", "media", "media", "baja"]);
 });
 
 test("fase 11: cambios con motivo, revisiones y consultas nuevas usan las rutas del contrato", async () => {

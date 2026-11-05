@@ -20,6 +20,7 @@ const ICONOS = {
   rechazada: <CloseCircleFilled />,
   solicitud_rechazada: <CloseCircleFilled />,
   vencida: <ExclamationCircleOutlined />,
+  sin_realizar: <MinusCircleOutlined />,
   a_revisar: <ExclamationCircleOutlined />,
   reemplazado: <SwapOutlined />,
   cancelado: <MinusCircleOutlined />,

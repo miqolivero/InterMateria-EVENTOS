@@ -9,6 +9,8 @@ import { useSesion } from "../contexto/useSesion.js";
 import { formatearFecha } from "../utils/formato.js";
 import { estados, ESTADOS_PROVEEDOR } from "../utils/estados.js";
 import EstadoTag from "../componentes/EstadoTag";
+import HistorialTarea from "../componentes/HistorialTarea";
+import LimpiarFiltros from "../componentes/LimpiarFiltros";
 import ErrorConsulta from "../componentes/ErrorConsulta";
 import EncabezadoPagina from "../componentes/EncabezadoPagina";
 import "./MisTareasEmpleado.css";
@@ -25,7 +27,8 @@ const FILTROS = [
   { value: "vencidas", label: "Vencidas" },
   { value: "pendiente", label: "Pendientes" },
   { value: "en_curso", label: "En curso" },
-  { value: "completada", label: "Completadas" }
+  { value: "completada", label: "Completadas" },
+  { value: "sin_realizar", label: "No realizadas" }
 ];
 
 
@@ -37,6 +40,7 @@ const colorDelPaso = (estado) => estado === "completada" ? "green" : estado === 
 
 function Tarea({ tarea, actualizar }) {
   const { ocupado, ejecutar } = useAccion();
+  const [historial, setHistorial] = useState(false);
   const siguiente = SIGUIENTE[tarea.estado_tarea];
   const pasos = tarea.servicio?.pasos || [];
   const cambiar = async (estado, exito) => {
@@ -50,23 +54,26 @@ function Tarea({ tarea, actualizar }) {
     <div className="tarea-cabecera">
       <Typography.Text strong className="tarea-descripcion">{tarea.descripcion}</Typography.Text>
       <Space size={4} wrap>{tarea.vencida && <Tag color="red">Vencida</Tag>}{tarea.a_revisar && <Tag color="orange">A revisar</Tag>}
-        <EstadoTag estado={tarea.estado_tarea} /></Space>
+        <EstadoTag estado={tarea.sin_realizar ? "sin_realizar" : tarea.estado_tarea} /></Space>
     </div>
     <Typography.Text type={tarea.vencida ? "danger" : "secondary"} className="tarea-fecha">
       <CalendarOutlined /> Para el {formatearFecha(tarea.fecha_prevista)}
       {tarea.fecha_finalizacion && ` · completada el ${formatearFecha(tarea.fecha_finalizacion)}`}
+      {tarea.fecha_primera_finalizacion && tarea.fecha_primera_finalizacion !== tarea.fecha_finalizacion && ` · terminada por primera vez el ${formatearFecha(tarea.fecha_primera_finalizacion)}`}
     </Typography.Text>
     {tarea.servicio && <Typography.Text type="secondary" className="tarea-servicio">
       {tarea.servicio.nombre_servicio}{tarea.servicio.proveedor ? ` · ${tarea.servicio.proveedor.razon_social}` : ""}</Typography.Text>}
     {tarea.observaciones && <Typography.Paragraph className="tarea-observaciones">{tarea.observaciones}</Typography.Paragraph>}
     {/* Los pasos del servicio como referencia: se completan en cualquier orden */}
     {pasos.length > 1 && <div className="tarea-pasos">{pasos.map((p) => <Tag key={p.orden} color={colorDelPaso(p.estado_tarea)}>{p.nombre_tipo_tarea}</Tag>)}</div>}
-    <div className="tarea-acciones">
+    {tarea.plazo_terminado ? <Typography.Text type="secondary">El evento ya pasó: esta tarea no se puede modificar.</Typography.Text> : <div className="tarea-acciones">
       {boton}
       {ANTERIOR[tarea.estado_tarea] && <Button type="link" disabled={ocupado}
         onClick={() => cambiar(ANTERIOR[tarea.estado_tarea], "Estado actualizado.")}>
         Volver a {estados[ANTERIOR[tarea.estado_tarea]].texto.toLowerCase()}</Button>}
-    </div>
+    </div>}
+    <Button type="link" size="small" onClick={() => setHistorial(true)}>Ver historial</Button>
+    {historial && <HistorialTarea tarea={tarea} cerrar={() => setHistorial(false)} />}
   </div>;
 }
 
@@ -110,7 +117,7 @@ function Proveedor({ servicio, actualizar }) {
 
 // Agrupa por evento. Primero los eventos con tareas vencidas, después por fecha.
 // Dentro de cada evento quedan en el orden de la API: vencidas arriba.
-function agruparPorEvento(tareas) {
+function agruparPorEvento(tareas, orden = "vencidas") {
   const grupos = new Map();
   for (const tarea of tareas) {
     const id = tarea.evento.id_evento;
@@ -120,22 +127,34 @@ function agruparPorEvento(tareas) {
     if (tarea.servicio) grupo.servicios.set(tarea.servicio.id_servicio_x_evento, tarea.servicio);
   }
   const conVencidas = (g) => g.tareas.some((t) => t.vencida) ? 0 : 1;
-  return [...grupos.values()].sort((a, b) => conVencidas(a) - conVencidas(b)
-    || a.evento.fecha_evento_confirmada.localeCompare(b.evento.fecha_evento_confirmada));
+  const porFecha = (a, b) => a.evento.fecha_evento_confirmada.localeCompare(b.evento.fecha_evento_confirmada);
+  if (orden === "cercanos") return [...grupos.values()].sort(porFecha);
+  if (orden === "lejanos") return [...grupos.values()].sort((a, b) => porFecha(b, a));
+  return [...grupos.values()].sort((a, b) => conVencidas(a) - conVencidas(b) || porFecha(a, b));
 }
 
 export default function MisTareasEmpleado() {
   const { usuario } = useSesion();
   const [filtro, setFiltro] = useState("todas");
   const consulta = useConsulta(useCallback(async () => (await misTareas(
-    filtro === "vencidas" ? { vencidas: true } : filtro === "todas" ? {} : { estado_tarea: filtro })).data, [filtro]));
-  const grupos = agruparPorEvento(consulta.datos || []);
+    filtro === "vencidas" ? { vencidas: true } : filtro === "sin_realizar" ? { sin_realizar: true } : filtro === "todas" ? {} : { estado_tarea: filtro })).data, [filtro]));
+  // Los eventos del filtro salen de todas sus tareas, no de las ya filtradas
+  const todas = useConsulta(useCallback(async () => (await misTareas()).data, []));
+  const [idEvento, setIdEvento] = useState(null);
+  const [orden, setOrden] = useState("vencidas");
+  const eventos = agruparPorEvento(todas.datos || []).map((g) => g.evento);
+  const grupos = agruparPorEvento(consulta.datos || [], orden).filter((g) => !idEvento || g.evento.id_evento === idEvento);
   // El aviso de vencidas solo tiene sentido mirando todas las tareas
   const vencidas = filtro === "todas" ? (consulta.datos || []).filter((t) => t.vencida).length : 0;
   return <>
     <EncabezadoPagina titulo="Mis tareas" descripcion={`Hola, ${usuario.nombre.split(" ")[0]}.${vencidas ? ` Tenés ${vencidas} ${vencidas === 1 ? "tarea vencida" : "tareas vencidas"}.` : ""}`} />
     {/* Sin ancho fijo: en el celular se desliza en lugar de cortar los textos */}
     <div className="filtro-tareas"><Segmented options={FILTROS} value={filtro} onChange={setFiltro} aria-label="Filtrar por estado" /></div>
+    {eventos.length > 1 && <Select aria-label="Evento" placeholder="Todos los eventos" allowClear value={idEvento} onChange={setIdEvento} className="filtro-evento-empleado"
+      options={eventos.map((e) => ({ value: e.id_evento, label: `${e.nombre_cliente} · ${formatearFecha(e.fecha_evento_confirmada)}` }))} />}
+    <Select aria-label="Ordenar" value={orden} onChange={setOrden} className="filtro-evento-empleado"
+      options={[{ value: "vencidas", label: "Vencidas primero" }, { value: "cercanos", label: "Eventos más cercanos primero" }, { value: "lejanos", label: "Eventos más lejanos primero" }]} />
+    <div className="limpiar-filtros-empleado"><LimpiarFiltros activo={filtro !== "todas" || Boolean(idEvento)} alTocar={() => { setFiltro("todas"); setIdEvento(null); }} /></div>
     <ErrorConsulta {...consulta} />
     {consulta.cargando && <Card loading />}
     {!consulta.cargando && !consulta.error && grupos.length === 0 && <Card><Empty

@@ -9,6 +9,9 @@ export const catalogos = {
   servicios: { titulo: "Servicios", singular: "servicio", id: "id_servicio", campos: [
     ["nombre", "Nombre", 100, true], ["descripcion", "Descripción", 300]
   ] },
+  sedes: { titulo: "Sedes", singular: "sede", id: "id_sede", campos: [
+    ["nombre", "Nombre del salón", 200, true], ["direccion", "Dirección", 200]
+  ] },
   proveedores: { titulo: "Proveedores", singular: "proveedor", id: "id_proveedor", campos: [
     ["razon_social", "Razón social", 150, true], ["cuit", "CUIT", 13], ["telefono", "Teléfono", 30],
     ["email", "Email", 150], ["direccion", "Dirección", 200], ["observaciones", "Observaciones", 5000]

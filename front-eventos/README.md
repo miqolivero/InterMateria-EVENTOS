@@ -34,8 +34,12 @@ permisos los aplica la API.
 | Rol | Layout | Inicio | Pantallas |
 | --- | --- | --- | --- |
 | `superadmin` | `LayoutSuperadmin` | `/superadmin` | Resumen (métricas), Empresas (`/superadmin/empresas`: tabla con métricas, búsqueda, filtro, suspender y alta en dos pasos) y detalle (`/superadmin/empresas/:id`: datos, métricas y soporte de usuarios) |
-| `admin` | `LayoutPrincipal` | `/seguimiento` | Toda la operación, más Personal (con acceso), Usuarios y Mi empresa editable |
-| `coordinador` | `LayoutPrincipal` | `/seguimiento` | Toda la operación y Mi empresa en solo lectura |
+| `admin` | `LayoutPrincipal` | `/tareas` | (admin y coordinador) Todas las tareas de la empresa, con filtro por evento, responsable y estado |
+| `/p/:token` | Sin login: el presupuesto que ve el cliente con su link, sin costos ni proveedores. Puede aceptarlo o rechazarlo; la empresa confirma |
+| `/seguimiento` | Toda la operación, más Personal (con acceso), Usuarios y Mi empresa editable |
+| `coordinador` | `LayoutPrincipal` | `/tareas` | (admin y coordinador) Todas las tareas de la empresa, con filtro por evento, responsable y estado |
+| `/p/:token` | Sin login: el presupuesto que ve el cliente con su link, sin costos ni proveedores. Puede aceptarlo o rechazarlo; la empresa confirma |
+| `/seguimiento` | Toda la operación y Mi empresa en solo lectura |
 | `empleado` | `LayoutEmpleado` | `/mis-tareas` | Mis tareas (su panel para el celular), Mis eventos (el contexto completo, sin importes) y Mi empresa en solo lectura |
 
 | Ruta | Funcionalidad |
@@ -49,11 +53,12 @@ permisos los aplica la API.
 | `/mi-empresa` | Datos de la empresa; el admin los edita, el CUIT queda en solo lectura |
 | `/solicitudes`, `/solicitudes/:id` | Listado, nueva solicitud, datos, presupuestos y acciones según estado |
 | `/presupuestos/:id` | Cabecera, detalle, totales, versiones, presentación, rechazo y aceptación |
-| `/eventos`, `/eventos/:id` | Listado con calendario; resumen con indicadores, servicios, tareas, "A revisar", historial, cierre y feedback. "Cambiar lo acordado" pide motivo |
-| `/eventos-por-estado` | (admin y coordinador) Solicitudes que esperan respuesta y eventos, con una pestaña por situación y el conteo; rechazadas y canceladas siguen a la vista |
+| `/eventos`, `/eventos/:id` | Listado, calendario y "Por estado" (`?vista=estado`: solicitudes que esperan respuesta y eventos, con el conteo por situación; rechazadas y canceladas siguen a la vista); resumen con indicadores, servicios, tareas, "A revisar", historial, cierre y feedback. "Cambiar lo acordado" pide motivo |
 | `/mis-tareas` | Admin y coordinador: tabla de sus tareas. Empleado: tarjetas por evento, vencidas arriba, filtro, pasos como referencia, "A revisar", avanzar estado y gestión del proveedor (sin importes) |
 | `/mis-eventos`, `/mis-eventos/:id` | (empleado) Los eventos donde tiene tareas y su resumen: indicadores, lo que tiene que revisar, servicios sin importes, las tareas de todo el equipo y los últimos cambios |
-| `/seguimiento` | Indicadores (con "A revisar"), próximos eventos con tareas X de Y, servicios X de Y y alerta, vencidas y servicios sin confirmar |
+| `/tareas` | (admin y coordinador) Todas las tareas de la empresa, con filtro por evento, responsable y estado |
+| `/p/:token` | Sin login: el presupuesto que ve el cliente con su link, sin costos ni proveedores. Puede aceptarlo o rechazarlo; la empresa confirma |
+| `/seguimiento` | El próximo evento con su cuenta regresiva, indicadores (con "A revisar"), próximos eventos con tareas X de Y, servicios X de Y y alerta, vencidas y servicios sin confirmar |
 | Otras rutas | Con sesión muestra la página 404; sin sesión redirige al login |
 
 Si la API responde 403 con `codigo: "empresa_suspendida"`, el front cierra la
@@ -99,6 +104,8 @@ con el `mensaje` de la API, sin cerrar nada.
 - Vencidas, indicadores, alerta y totales se muestran según los datos del backend
   (no se recalculan en el front). El
   cierre avisa si hay pendientes, pero el usuario decide si cierra el evento.
+- Las columnas de fecha se ordenan tocando su encabezado (`utils/tablas.js`). Cada
+  listado muestra "Limpiar filtros" cuando tiene alguno puesto (`useFiltros`).
 - Fechas DD/MM/YYYY, moneda ARS y estados con etiquetas compartidas. Las
   animaciones respetan `prefers-reduced-motion`.
 

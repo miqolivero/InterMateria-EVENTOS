@@ -7,6 +7,7 @@ import {
   cambiarEstadoSolicitud
 } from "../controllers/solicitudes.controller.js";
 import { crearPresupuesto } from "../controllers/presupuestos.controller.js";
+import { datosSolicitud } from "../middlewares/datos.middleware.js";
 import { validarParamId } from "../middlewares/validarId.middleware.js";
 
 const router = Router();
@@ -19,8 +20,8 @@ router.param("id", validarParamId("Solicitud no encontrada"));
 
 router.get("/", obtenerSolicitudes);
 router.get("/:id", obtenerSolicitudPorId);
-router.post("/", crearSolicitud);
-router.put("/:id", editarSolicitud);
+router.post("/", datosSolicitud, crearSolicitud);
+router.put("/:id", datosSolicitud, editarSolicitud);
 
 // No hay DELETE: una solicitud que no sigue se cancela o se rechaza, asi queda
 // el registro de que el cliente pidio algo.

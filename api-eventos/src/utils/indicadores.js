@@ -6,12 +6,27 @@
 // Son fragmentos de SQL, igual que el resto de las consultas del proyecto:
 // la base cuenta y filtra, y la condicion se puede revisar a mano en psql.
 
+// El evento ya paso: la tarea queda como estaba y no se puede modificar. El dia
+// del evento todavia se puede. Una tarea prevista para despues del evento (el
+// cierre con el proveedor, al dia siguiente) sigue abierta hasta su fecha: por
+// eso el GREATEST. Necesita los alias t y e.
+export const plazoTerminado = (alias = "t") => `(GREATEST(e.fecha_evento_confirmada, ${alias}.fecha_prevista) < CURRENT_DATE)`;
+export const CONDICION_PLAZO_TERMINADO = plazoTerminado();
+
+// "No realizada": la tarea no se completo y ya no tiene sentido esperarla, porque
+// el evento se cerro o ya paso. No figura como pendiente ni como vencida, pero se
+// calcula y no se guarda: el sistema no cambia el estado solo.
+export const CONDICION_SIN_REALIZAR = `(t.estado_tarea <> 'completada'
+   AND (e.estado IN ('realizado', 'cancelado') OR ${CONDICION_PLAZO_TERMINADO}))`;
+
 // Regla 1: una tarea vencida tiene fecha prevista pasada y no esta completada.
 // Una tarea sin fecha prevista nunca esta vencida (null < fecha da null, por
-// eso se chequea aparte).
+// eso se chequea aparte). Si el evento ya paso, deja de estar "vencida" y pasa a
+// estar "no realizada".
 export const CONDICION_VENCIDA = `(t.fecha_prevista IS NOT NULL
    AND t.fecha_prevista < CURRENT_DATE
-   AND t.estado_tarea <> 'completada')`;
+   AND t.estado_tarea <> 'completada'
+   AND NOT ${CONDICION_SIN_REALIZAR})`;
 
 // Servicios del evento (alias sxe). Un servicio cancelado no cuenta en ningun
 // indicador: no esta ni confirmado ni sin confirmar.
@@ -67,12 +82,13 @@ export const JOIN_INDICADORES = `
   CROSS JOIN LATERAL (
     SELECT ta.tareas_completadas, ta.tareas_total,
            sv.servicios_confirmados, sv.servicios_total,
-           ta.tareas_vencidas, sv.servicios_sin_confirmar,
+           ta.tareas_vencidas, ta.tareas_sin_realizar, sv.servicios_sin_confirmar,
            rv.pendientes_revision,
            (sv.servicios_sin_confirmar > 0 OR rv.pendientes_revision > 0) AS alerta
     FROM (SELECT COUNT(*) FILTER (WHERE t.estado_tarea = 'completada')::int AS tareas_completadas,
                  COUNT(*)::int AS tareas_total,
-                 COUNT(*) FILTER (WHERE ${CONDICION_VENCIDA})::int AS tareas_vencidas
+                 COUNT(*) FILTER (WHERE ${CONDICION_VENCIDA})::int AS tareas_vencidas,
+                 COUNT(*) FILTER (WHERE ${CONDICION_SIN_REALIZAR})::int AS tareas_sin_realizar
           FROM tareas t WHERE t.id_evento = e.id_evento) ta,
          (SELECT COUNT(*) FILTER (WHERE ${SERVICIO_CONFIRMADO})::int AS servicios_confirmados,
                  COUNT(*) FILTER (WHERE ${SERVICIO_ACORDADO})::int AS servicios_total,
@@ -85,5 +101,5 @@ export const JOIN_INDICADORES = `
 export const COLUMNAS_INDICADORES = `
   ind.tareas_completadas, ind.tareas_total,
   ind.servicios_confirmados, ind.servicios_total,
-  ind.tareas_vencidas, ind.servicios_sin_confirmar,
+  ind.tareas_vencidas, ind.tareas_sin_realizar, ind.servicios_sin_confirmar,
   ind.pendientes_revision, ind.alerta`;

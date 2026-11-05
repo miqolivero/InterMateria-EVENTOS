@@ -1,7 +1,7 @@
 import pool from "../data/db.js";
 import { responderError } from "../utils/errores.js";
-import { existeEnEmpresa } from "../utils/consultas.js";
-import { esIdValido, esFechaValida } from "../utils/validaciones.js";
+import { existeEnEmpresa, sedeDeEmpresa } from "../utils/consultas.js";
+import { esIdValido, esFechaValida, esVacio } from "../utils/validaciones.js";
 
 // Solicitudes: el pedido inicial del cliente, antes de cualquier presupuesto.
 // Como todo el sistema es multitenant, TODAS las consultas filtran por
@@ -13,6 +13,7 @@ const MENSAJES = {
     "El cliente, el tipo de evento, la fecha y la cantidad de asistentes son obligatorios",
   clienteInvalido: "El cliente no existe o esta inactivo",
   tipoEventoInvalido: "El tipo de evento no existe o esta inactivo",
+  sedeInvalida: "La sede no existe o esta inactiva",
   cantidadInvalida: "La cantidad de asistentes tiene que ser mayor a 0",
   fechaPasada: "La fecha del evento no puede ser anterior a hoy",
   noEditable: "Solo se puede editar una solicitud pendiente o presupuestada",
@@ -44,7 +45,7 @@ const COLUMNAS = `
   CONCAT_WS(' ', c.nombre, NULLIF(c.apellido, '-')) AS nombre_cliente,
   s.id_tipo_evento, te.nombre AS nombre_tipo_evento,
   s.fecha_solicitud, s.fecha_evento_prevista, s.cantidad_asistentes,
-  s.sede_prevista, s.preferencias, s.estado,
+  s.id_sede, s.sede_prevista, s.preferencias, s.estado,
   e.id_evento`;
 
 const FROM_SOLICITUD = `
@@ -132,6 +133,16 @@ const validarSolicitud = async (body, idEmpresa) => {
   return null;
 };
 
+// La sede es opcional: el cliente puede no haberla decidido. Se guarda la
+// referencia y una copia del nombre. Devuelve { id_sede, sede_prevista }, o null
+// si la sede elegida no sirve. Pedir un salon no lo reserva: se ocupa al confirmar.
+const leerSede = async (body, idEmpresa, idActual = null) => {
+  if (esVacio(body.id_sede)) return { id_sede: null, sede_prevista: null };
+  if (!esIdValido(body.id_sede)) return null;
+  const sede = await sedeDeEmpresa(pool, body.id_sede, idEmpresa, idActual);
+  return sede && { id_sede: sede.id_sede, sede_prevista: sede.nombre };
+};
+
 // GET /api/solicitudes?estado=&id_cliente=&desde=&hasta=&buscar=
 export const obtenerSolicitudes = async (req, res) => {
   const { estado, id_cliente, desde, hasta, buscar } = req.query;
@@ -193,7 +204,8 @@ export const obtenerSolicitudPorId = async (req, res) => {
                           'numero_version', p.numero_version,
                           'fecha_emision', p.fecha_emision,
                           'importe_total', p.importe_total,
-                          'estado', p.estado)
+                          'estado', p.estado,
+                          'respuesta_cliente', p.respuesta_cliente)
                         ORDER BY p.numero_version)
                  FROM presupuestos p
                  WHERE p.id_solicitud = s.id_solicitud),
@@ -230,9 +242,13 @@ export const crearSolicitud = async (req, res) => {
       id_tipo_evento,
       fecha_evento_prevista,
       cantidad_asistentes,
-      sede_prevista,
       preferencias
     } = req.body;
+
+    const sede = await leerSede(req.body, idEmpresa);
+    if (!sede) {
+      return res.status(400).json({ mensaje: MENSAJES.sedeInvalida });
+    }
 
     // fecha_solicitud (hoy) y estado ('pendiente') los pone el DEFAULT de la
     // base. No se leen del body: una solicitud siempre nace pendiente.
@@ -240,8 +256,8 @@ export const crearSolicitud = async (req, res) => {
     const resultado = await pool.query(
       `INSERT INTO solicitudes (id_empresa, id_cliente, id_tipo_evento,
                                 fecha_evento_prevista, cantidad_asistentes,
-                                sede_prevista, preferencias)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+                                id_sede, sede_prevista, preferencias)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING id_solicitud`,
       [
         idEmpresa,
@@ -249,7 +265,8 @@ export const crearSolicitud = async (req, res) => {
         id_tipo_evento,
         fecha_evento_prevista,
         cantidad_asistentes,
-        sede_prevista ?? null,
+        sede.id_sede,
+        sede.sede_prevista,
         preferencias ?? null
       ]
     );
@@ -288,9 +305,17 @@ export const editarSolicitud = async (req, res) => {
       id_tipo_evento,
       fecha_evento_prevista,
       cantidad_asistentes,
-      sede_prevista,
       preferencias
     } = req.body;
+
+    const { rows: actuales } = await pool.query(
+      "SELECT id_sede FROM solicitudes WHERE id_solicitud = $1 AND id_empresa = $2",
+      [req.params.id, idEmpresa]
+    );
+    const sede = await leerSede(req.body, idEmpresa, actuales[0]?.id_sede ?? null);
+    if (!sede) {
+      return res.status(400).json({ mensaje: MENSAJES.sedeInvalida });
+    }
 
     // El estado va en el WHERE del UPDATE y no en un SELECT previo: asi el
     // chequeo y la modificacion son una sola operacion, y nadie puede aceptar
@@ -301,17 +326,19 @@ export const editarSolicitud = async (req, res) => {
            id_tipo_evento = $2,
            fecha_evento_prevista = $3,
            cantidad_asistentes = $4,
-           sede_prevista = $5,
-           preferencias = $6
-       WHERE id_solicitud = $7 AND id_empresa = $8
-         AND estado = ANY($9)
+           id_sede = $5,
+           sede_prevista = $6,
+           preferencias = $7
+       WHERE id_solicitud = $8 AND id_empresa = $9
+         AND estado = ANY($10)
        RETURNING id_solicitud`,
       [
         id_cliente,
         id_tipo_evento,
         fecha_evento_prevista,
         cantidad_asistentes,
-        sede_prevista ?? null,
+        sede.id_sede,
+        sede.sede_prevista,
         preferencias ?? null,
         req.params.id,
         idEmpresa,

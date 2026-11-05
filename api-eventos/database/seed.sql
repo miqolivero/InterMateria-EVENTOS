@@ -621,6 +621,25 @@ INSERT INTO solicitudes (id_solicitud, id_empresa, id_cliente, id_tipo_evento,
  NULL, 'Brindis de fin de año de su estudio. Desistió antes del presupuesto', 'cancelada');
 
 -- =============================================================================
+-- Sedes: el catalogo de salones. Las solicitudes y los eventos de arriba quedan
+-- apuntando a la suya por el nombre, como lo hace db:actualizar con una base vieja.
+-- =============================================================================
+INSERT INTO sedes (id_sede, id_empresa, nombre, direccion) VALUES
+(1, 1, 'Salón Las Palmas', 'Av. Rafael Núñez 3500, Córdoba'),
+(2, 1, 'Estancia El Molino', 'Ruta 5 km 21, Alta Gracia'),
+(3, 1, 'Hotel Quinto Centenario', 'Duarte Quirós 1300, Córdoba'),
+(4, 1, 'Club Atlético Belgrano', 'Arturo Orgaz 510, Córdoba'),
+(5, 1, 'Quinta Los Álamos', 'Camino a La Calera km 9, Córdoba'),
+(6, 2, 'Salón Girasoles', 'Bv. Los Andes 200, Córdoba'),
+(7, 2, 'Salón Pequeños Gigantes', 'Monseñor Pablo Cabrera 3100, Córdoba');
+
+UPDATE eventos e SET id_sede = x.id_sede FROM sedes x
+WHERE x.id_empresa = e.id_empresa AND x.nombre = e.sede_acordada;
+
+UPDATE solicitudes s SET id_sede = x.id_sede FROM sedes x
+WHERE x.id_empresa = s.id_empresa AND x.nombre = s.sede_prevista;
+
+-- =============================================================================
 -- Reacomodar las secuencias
 -- =============================================================================
 -- Como los ids se insertaron a mano, las secuencias quedaron en 1 y el proximo
@@ -634,12 +653,16 @@ SELECT setval('clientes_id_cliente_seq',                     (SELECT MAX(id_clie
 SELECT setval('servicios_id_servicio_seq',                   (SELECT MAX(id_servicio) FROM servicios));
 SELECT setval('proveedores_id_proveedor_seq',                (SELECT MAX(id_proveedor) FROM proveedores));
 SELECT setval('proveedores_x_servicio_id_proveedor_x_servicio_seq', (SELECT MAX(id_proveedor_x_servicio) FROM proveedores_x_servicio));
+SELECT setval('sedes_id_sede_seq',                           (SELECT MAX(id_sede) FROM sedes));
 SELECT setval('solicitudes_id_solicitud_seq',                (SELECT MAX(id_solicitud) FROM solicitudes));
 SELECT setval('presupuestos_id_presupuesto_seq',             (SELECT MAX(id_presupuesto) FROM presupuestos));
 SELECT setval('detalle_presupuesto_id_detalle_seq',          (SELECT MAX(id_detalle) FROM detalle_presupuesto));
 SELECT setval('eventos_id_evento_seq',                       (SELECT MAX(id_evento) FROM eventos));
 SELECT setval('servicios_x_evento_id_servicio_x_evento_seq', (SELECT MAX(id_servicio_x_evento) FROM servicios_x_evento));
 SELECT setval('tipos_tarea_id_tipo_tarea_seq',               (SELECT MAX(id_tipo_tarea) FROM tipos_tarea));
+-- Las tareas ya completadas del seed: esa fue su primera finalizacion
+UPDATE tareas SET fecha_primera_finalizacion = fecha_finalizacion;
+
 SELECT setval('tareas_id_tarea_seq',                         (SELECT MAX(id_tarea) FROM tareas));
 SELECT setval('cambios_evento_id_cambio_seq',                (SELECT MAX(id_cambio) FROM cambios_evento));
 SELECT setval('afectados_cambio_id_afectado_seq',            (SELECT MAX(id_afectado) FROM afectados_cambio));

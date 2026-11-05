@@ -15,12 +15,12 @@ export default function EditorSolicitud({ datos, cerrar, guardado }) {
   const [crearRapido, setCrearRapido] = useState(false);
   const { ocupado, ejecutar } = useAccion();
   const catalogos = useConsulta(useCallback(async () => {
-    const [clientes, tipos] = await Promise.all([listarCatalogo("clientes"), listarCatalogo("tipos")]);
-    return { clientes: clientes.data, tipos: tipos.data };
+    const [clientes, tipos, sedes] = await Promise.all([listarCatalogo("clientes"), listarCatalogo("tipos"), listarCatalogo("sedes")]);
+    return { clientes: clientes.data, tipos: tipos.data, sedes: sedes.data };
   }, []));
   useEffect(() => { form.setFieldsValue({ ...datos, fecha_evento_prevista: datos.fecha_evento_prevista ? dayjs(datos.fecha_evento_prevista) : null }); }, [datos, form]);
   async function guardar(valores) {
-    const body = { ...camposPermitidos(valores, ["id_cliente", "id_tipo_evento", "cantidad_asistentes", "sede_prevista", "preferencias"]), fecha_evento_prevista: fechaAPI(valores.fecha_evento_prevista) };
+    const body = { ...camposPermitidos(valores, ["id_cliente", "id_tipo_evento", "cantidad_asistentes", "id_sede", "preferencias"]), fecha_evento_prevista: fechaAPI(valores.fecha_evento_prevista) };
     const respuesta = await ejecutar(() => datos.id_solicitud ? editarSolicitud(datos.id_solicitud, body) : crearSolicitud(body));
     if (respuesta.ok) { guardado(respuesta.datos); cerrar(); }
   }
@@ -38,8 +38,11 @@ export default function EditorSolicitud({ datos, cerrar, guardado }) {
           <Select showSearch optionFilterProp="label" options={opcionesActivos(catalogos.datos?.tipos, "id_tipo_evento", "nombre", datos.id_tipo_evento)} />
         </Form.Item>
         <Form.Item label="Fecha prevista" name="fecha_evento_prevista" rules={[{ required: true }]}><DatePicker format="DD/MM/YYYY" disabledDate={sinFechasPasadas} /></Form.Item>
-        <Form.Item label="Asistentes" name="cantidad_asistentes" rules={[{ required: true }, { type: "integer", min: 1 }]}><InputNumber min={1} precision={0} /></Form.Item>
-        <Form.Item label="Sede prevista" name="sede_prevista"><Input maxLength={200} /></Form.Item>
+        <Form.Item label="Asistentes" name="cantidad_asistentes" rules={[{ required: true }, { type: "integer", min: 1, max: 10000, message: "Entre 1 y 10.000." }]}><InputNumber min={1} max={10000} precision={0} /></Form.Item>
+        <Form.Item label="Sede prevista" name="id_sede" extra="Los salones se cargan en Catálogos → Sedes. Pedirlo no lo reserva: se ocupa al confirmar el evento.">
+          <Select allowClear showSearch optionFilterProp="label" placeholder="A definir" notFoundContent="No hay sedes cargadas"
+            options={opcionesActivos(catalogos.datos?.sedes, "id_sede", "nombre", datos.id_sede)} />
+        </Form.Item>
         <Form.Item label="Preferencias" name="preferencias"><Input.TextArea rows={3} /></Form.Item>
       </Form>
     </Modal>

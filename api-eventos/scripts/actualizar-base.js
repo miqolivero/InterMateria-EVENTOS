@@ -32,7 +32,7 @@ try {
   await cliente.query("SELECT pg_advisory_xact_lock(720261022)");
   const schema = await readFile(new URL("../database/schema.sql", import.meta.url), "utf8");
   const tablas = [...schema.matchAll(/CREATE TABLE (\w+)\s*\([\s\S]*?\);/g)];
-  if (tablas.length !== 18) throw new Error("El esquema cambió: revisar la actualización antes de ejecutarla.");
+  if (tablas.length !== 20) throw new Error("El esquema cambió: revisar la actualización antes de ejecutarla.");
   const antes = (await cliente.query("SELECT tablename FROM pg_tables WHERE schemaname = 'public'")).rows.map(r => r.tablename);
   if (antes.includes("clientes")) {
     const columnas = (await cliente.query("SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='clientes'")).rows.map(r => r.column_name);
@@ -40,6 +40,19 @@ try {
     await cliente.query("ALTER TABLE clientes ADD COLUMN IF NOT EXISTS direccion VARCHAR(200), ADD COLUMN IF NOT EXISTS activo BOOLEAN NOT NULL DEFAULT TRUE, ADD COLUMN IF NOT EXISTS fecha_alta TIMESTAMP NOT NULL DEFAULT NOW()");
   }
   for (const [sql] of tablas) await cliente.query(sql.replace("CREATE TABLE ", "CREATE TABLE IF NOT EXISTS "));
+  // Sedes y link del presupuesto: las columnas van antes de crear los indices
+  for (const sql of [
+    "ALTER TABLE solicitudes ADD COLUMN IF NOT EXISTS id_sede INTEGER REFERENCES sedes(id_sede)",
+    "ALTER TABLE eventos ADD COLUMN IF NOT EXISTS id_sede INTEGER REFERENCES sedes(id_sede)",
+    "ALTER TABLE presupuestos ADD COLUMN IF NOT EXISTS token_publico UUID NOT NULL DEFAULT gen_random_uuid() UNIQUE",
+    "ALTER TABLE presupuestos ADD COLUMN IF NOT EXISTS respuesta_cliente VARCHAR(20) CHECK (respuesta_cliente IN ('aceptado', 'rechazado'))",
+    "ALTER TABLE presupuestos ADD COLUMN IF NOT EXISTS fecha_respuesta_cliente TIMESTAMP",
+    "ALTER TABLE presupuestos ADD COLUMN IF NOT EXISTS comentario_cliente TEXT",
+    // Lo que ya estaba terminado: esa es la unica finalizacion que se conoce
+    "ALTER TABLE tareas ADD COLUMN IF NOT EXISTS fecha_primera_finalizacion DATE",
+    "UPDATE tareas SET fecha_primera_finalizacion = fecha_finalizacion WHERE fecha_primera_finalizacion IS NULL AND fecha_finalizacion IS NOT NULL",
+    "ALTER TABLE afectados_cambio ADD COLUMN IF NOT EXISTS cambios_revision TEXT"
+  ]) await cliente.query(sql);
   for (const [sql] of schema.matchAll(/CREATE INDEX \w+ ON [\s\S]*?;/g)) await cliente.query(sql.replace("CREATE INDEX ", "CREATE INDEX IF NOT EXISTS "));
   // Datos fijos del sistema, sin empresas, usuarios ni eventos de prueba.
   for (const [orden, nombre, descripcion] of [
@@ -89,6 +102,33 @@ try {
     "ALTER TABLE eventos ADD CONSTRAINT eventos_cantidad_asistentes_check CHECK (cantidad_asistentes > 0)",
     "CREATE UNIQUE INDEX IF NOT EXISTS uq_tareas_servicio_paso ON tareas(id_servicio_x_evento, id_tipo_tarea) WHERE id_tipo_tarea IS NOT NULL"
   ]) await cliente.query(sql);
+  // Datos que no se pueden repetir. Los emails se pasan a minusculas antes del
+  // indice. Si ya hay datos repetidos, el indice falla, el ROLLBACK deja la base
+  // como estaba y el error dice cual es el dato: se corrige a mano y se repite.
+  await cliente.query("UPDATE usuarios SET email = lower(email) WHERE email <> lower(email)");
+  // Las sedes escritas a mano pasan al catalogo: una por salon distinto de cada
+  // empresa, y cada solicitud y evento queda apuntando a la suya. El texto se
+  // conserva. Repetido, no duplica nada: ya no quedan filas sin sede.
+  const normal = (columna) => `regexp_replace(translate(lower(btrim(${columna})), 'áéíóúü', 'aeiouu'), '\\s+', ' ', 'g')`;
+  await cliente.query(`
+    INSERT INTO sedes (id_empresa, nombre)
+    SELECT DISTINCT ON (id_empresa, clave) id_empresa, nombre FROM (
+      SELECT id_empresa, btrim(sede_acordada) AS nombre, ${normal("sede_acordada")} AS clave FROM eventos
+      WHERE sede_acordada IS NOT NULL AND btrim(sede_acordada) <> '' AND id_sede IS NULL
+      UNION ALL
+      SELECT id_empresa, btrim(sede_prevista), ${normal("sede_prevista")} FROM solicitudes
+      WHERE sede_prevista IS NOT NULL AND btrim(sede_prevista) <> '' AND id_sede IS NULL
+    ) escritas
+    WHERE NOT EXISTS (SELECT 1 FROM sedes x WHERE x.id_empresa = escritas.id_empresa AND ${normal("x.nombre")} = escritas.clave)
+    ORDER BY id_empresa, clave`);
+  await cliente.query(`UPDATE eventos e SET id_sede = x.id_sede FROM sedes x
+    WHERE e.id_sede IS NULL AND x.id_empresa = e.id_empresa AND ${normal("x.nombre")} = ${normal("e.sede_acordada")}`);
+  await cliente.query(`UPDATE solicitudes s SET id_sede = x.id_sede FROM sedes x
+    WHERE s.id_sede IS NULL AND x.id_empresa = s.id_empresa AND ${normal("x.nombre")} = ${normal("s.sede_prevista")}`);
+  await cliente.query("DROP INDEX IF EXISTS uq_eventos_sede_fecha");
+  for (const [sql] of schema.matchAll(/CREATE UNIQUE INDEX uq_\w+ ON [\s\S]*?;/g)) {
+    await cliente.query(sql.replace("CREATE UNIQUE INDEX ", "CREATE UNIQUE INDEX IF NOT EXISTS "));
+  }
   await cliente.query("COMMIT");
   console.log("Base actualizada. Se conservaron los registros existentes.");
 } catch (error) {

@@ -57,7 +57,7 @@ export const login = async (req, res) => {
 
   try {
     // 1. Buscar el usuario por email, con su empresa
-    const resultado = await pool.query(`${SELECT_SESION} WHERE u.email = $1`, [email]);
+    const resultado = await pool.query(`${SELECT_SESION} WHERE lower(u.email) = lower($1)`, [String(email).trim()]);
     const usuario = resultado.rows[0];
 
     // Mismo mensaje que si falla la contrasena: no revelamos que emails existen

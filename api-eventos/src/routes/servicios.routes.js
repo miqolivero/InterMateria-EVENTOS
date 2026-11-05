@@ -6,6 +6,7 @@ import {
   editarServicio,
   cambiarActivoServicio
 } from "../controllers/servicios.controller.js";
+import { datosCatalogo } from "../middlewares/datos.middleware.js";
 import { validarParamId } from "../middlewares/validarId.middleware.js";
 
 const router = Router();
@@ -16,8 +17,8 @@ router.param("id", validarParamId("Servicio no encontrado"));
 
 router.get("/", obtenerServicios);
 router.get("/:id", obtenerServicioPorId);
-router.post("/", crearServicio);
-router.put("/:id", editarServicio);
+router.post("/", datosCatalogo, crearServicio);
+router.put("/:id", datosCatalogo, editarServicio);
 router.patch("/:id/activo", cambiarActivoServicio);
 
 export default router;

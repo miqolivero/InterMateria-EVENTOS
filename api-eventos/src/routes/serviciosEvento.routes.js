@@ -6,6 +6,7 @@ import {
   cambiarEstadoProveedor,
   generarTareas
 } from "../controllers/serviciosEvento.controller.js";
+import { datosRenglon } from "../middlewares/datos.middleware.js";
 import { validarParamId } from "../middlewares/validarId.middleware.js";
 import { permitirRoles } from "../middlewares/auth.middleware.js";
 
@@ -28,7 +29,7 @@ router.use(permitirRoles("admin", "coordinador"));
 
 // Cambios de lo acordado (Fase 11): con motivo y registrados en el historial.
 // El PATCH /:id de la Fase 6 ya no existe: se reparte entre estos y /estado.
-router.put("/:id", modificarServicioEvento);
+router.put("/:id", datosRenglon, modificarServicioEvento);
 router.put("/:id/proveedor", cambiarProveedor);
 router.patch("/:id/cancelar", cancelarServicio);
 

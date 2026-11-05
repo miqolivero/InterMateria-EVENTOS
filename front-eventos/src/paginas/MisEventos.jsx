@@ -1,9 +1,10 @@
 import { useCallback, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { Card, Descriptions, Empty, List, Skeleton, Table, Tag, Timeline } from "antd";
+import { Card, Descriptions, Empty, List, Select, Skeleton, Table, Tag, Timeline } from "antd";
 import { misTareas, resumenEvento } from "../servicios/operacionService.js";
 import { useConsulta } from "../contexto/useConsulta.js";
 import { formatearFecha } from "../utils/formato.js";
+import { ordenFecha } from "../utils/tablas.js";
 import EncabezadoPagina from "../componentes/EncabezadoPagina";
 import ErrorConsulta from "../componentes/ErrorConsulta";
 import EstadoTag from "../componentes/EstadoTag";
@@ -20,11 +21,13 @@ import "../componentes/Cambios.css";
 // Los eventos salen de sus tareas: son los mismos que ve en "Mis tareas"
 export default function MisEventos() {
   const consulta = useConsulta(useCallback(async () => (await misTareas()).data, []));
+  const [orden, setOrden] = useState(1);
   const eventos = [...new Map((consulta.datos || []).map((t) => [t.evento.id_evento, t.evento])).values()]
-    .sort((a, b) => a.fecha_evento_confirmada.localeCompare(b.fecha_evento_confirmada));
+    .sort((a, b) => orden * a.fecha_evento_confirmada.localeCompare(b.fecha_evento_confirmada));
   return <><EncabezadoPagina titulo="Mis eventos" descripcion="Los eventos donde tenés tareas." />
     <ErrorConsulta {...consulta} />
-    <Card loading={consulta.cargando}>{eventos.length === 0 ? <Empty description="No tenés tareas en eventos abiertos." />
+    <Card loading={consulta.cargando} extra={<Select aria-label="Ordenar por fecha" value={orden} onChange={setOrden}
+      options={[{ value: 1, label: "Más cercanos primero" }, { value: -1, label: "Más lejanos primero" }]} />}>{eventos.length === 0 ? <Empty description="No tenés tareas en eventos abiertos." />
       : <List dataSource={eventos} renderItem={(e) => <List.Item extra={<EstadoTag estado={e.estado} />}>
         <List.Item.Meta title={<Link to={`/mis-eventos/${e.id_evento}`}>{e.nombre_cliente}</Link>}
           description={`${e.nombre_tipo_evento} · ${formatearFecha(e.fecha_evento_confirmada)}${e.sede_acordada ? ` · ${e.sede_acordada}` : ""}`} />
@@ -63,7 +66,7 @@ export function MiEventoDetalle() {
       { title: "Tarea", dataIndex: "descripcion", render: (v, t) => <div className="servicio-nombre"><span>{v}</span>
         <span>{t.vencida && <Tag color="red">Vencida</Tag>}{t.a_revisar && <Tag color="orange">A revisar</Tag>}</span></div> },
       { title: "Responsable", dataIndex: "nombre_responsable", render: (v) => v || "Sin asignar" },
-      { title: "Fecha prevista", dataIndex: "fecha_prevista", render: formatearFecha },
+      { title: "Fecha prevista", dataIndex: "fecha_prevista", render: formatearFecha, ...ordenFecha("fecha_prevista") },
       { title: "Estado", dataIndex: "estado_tarea", render: (v) => <EstadoTag estado={v} /> }
     ]} /></Card>
     <Card title="Últimos cambios">{cambios.length === 0 ? <Empty description="Sin cambios después de confirmar." />

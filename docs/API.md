@@ -1858,8 +1858,10 @@ responden 409 · `"El evento esta cerrado y no se puede modificar"`, como antes.
   "id_tarea": null,
   "descripcion_tarea": null,
   "responsable": null,
+  "estado_proveedor": "pendiente",
   "revisado": false,
   "nota_revision": null,
+  "cambios_revision": null,
   "revisado_por": null,
   "fecha_revision": null,
   "cambio": {
@@ -2050,16 +2052,22 @@ Respuesta 200: `[Revisión]`. Filtro: `?revisado=false` (por defecto trae todas)
 
 ### PATCH /revisiones/:id (nuevo)
 
-Deja constancia de que un compromiso afectado fue revisado.
+Deja constancia de que un compromiso afectado fue revisado y, si se indica,
+lo actualiza en la misma transacción.
 
 ```json
-{ "nota_revision": "Se avisó a Deco Fiestas, confirma igual para el 22" }
+{ "nota_revision": "Catering confirma para el 22", "fecha_prevista": "2026-12-15",
+  "id_empleado_responsable": 3, "estado_tarea": "en_curso" }
 ```
 
 - Guarda `revisado = true`, quién y cuándo.
 - La nota es obligatoria: el cliente pidió "dejar constancia".
-- **No cambia nada más**: si hay que actualizar la tarea o el proveedor, se
-  hace con sus propios endpoints.
+- Una tarea acepta `fecha_prevista`, `id_empleado_responsable` y `estado_tarea`;
+  un servicio, `estado_proveedor`. Todos son opcionales: lo que no viene no cambia.
+- `cambios_revision` guarda en palabras lo que se actualizó. Un cambio de estado de
+  la tarea también entra en su historial.
+- El `empleado` solo actualiza estados (otro campo: 403).
+- Si el evento ya pasó, la tarea admite solo la nota (409 si se manda otro cambio).
 
 Respuesta 200: **Revisión**.
 
@@ -2278,7 +2286,7 @@ acordaron antes de implementar):
 - **`PATCH /revisiones/:id` con el evento cerrado:** 409 · `"El evento esta
   cerrado y no se puede modificar"`, como el resto.
 - **`DELETE /tareas/:id` de una tarea con revisiones:** 409 · `"La tarea tiene
-  revisiones registradas y no se puede eliminar"`.
+  historial registrado y no se puede eliminar"` (también si ya cambió de estado).
 - **Revisión** suma `id_evento`. **Tarea** suma `pendientes_revision`. El
   objeto `servicio` de `/tareas/mias` suma `estado_servicio` y `a_revisar`
   y conserva `pasos` como referencia.
@@ -2291,6 +2299,95 @@ acordaron antes de implementar):
   router abre solo `/resumen` y `/revisiones` y cierra el resto con
   `router.use(permitirRoles("admin", "coordinador"))`. El resumen de un evento
   cerrado se puede ver.
+
+## Sedes, link del presupuesto y tareas de la empresa (agregado)
+
+**Sedes · `/api/sedes`** (admin y coordinador). Catálogo por empresa, igual que
+servicios: `GET`, `GET /:id`, `POST`, `PUT /:id` y `PATCH /:id/activo`. Objeto:
+`{ id_sede, nombre, direccion, activo }`. Solicitudes y eventos reciben `id_sede`
+en lugar de escribir la sede: `POST` y `PUT /solicitudes`, `POST /presupuestos/:id/aceptar`
+y `PUT /eventos/:id`. 400 · `"La sede no existe o esta inactiva"` y
+`"Ya existe una sede con ese nombre"`. `sede_prevista` y `sede_acordada` siguen
+en las respuestas: son una copia del nombre. Renombrar una sede no cambia lo ya
+acordado, y un evento puede conservar una sede dada de baja.
+
+**Link del presupuesto · `/api/publico`** (sin login):
+
+- `GET /publico/presupuestos/:token`: empresa, cliente, evento, servicios con su
+  importe, total, validez y `puede_responder`. **Nunca** costos, márgenes ni
+  proveedores. 404 si el token no existe, si está en borrador o si la empresa está
+  suspendida. Una versión reemplazada responde solo `{ estado, empresa }`.
+- `POST /publico/presupuestos/:token/respuesta` · `{ respuesta, comentario }`, con
+  `respuesta` en `aceptado` o `rechazado`. Se registra una sola vez. **No cambia el
+  estado ni crea el evento:** eso lo hace la empresa. 400 ·
+  `"La respuesta tiene que ser aceptado o rechazado"`. 409 ·
+  `"Ya registramos tu respuesta a este presupuesto"`, `"El presupuesto esta vencido"`
+  o `"Este presupuesto ya no admite respuesta"`.
+
+El objeto Presupuesto suma `token_publico`, `respuesta_cliente`,
+`fecha_respuesta_cliente` y `comentario_cliente`. `por-estado` y los presupuestos
+de una solicitud suman `respuesta_cliente`.
+
+**Tareas de la empresa · `GET /tareas`** (admin y coordinador). Filtros:
+`?id_evento`, `?id_empleado_responsable`, `?estado_tarea`, `?vencidas=true` y
+`?sin_realizar=true`. Trae los datos del evento y `estado_evento`.
+
+`GET /tareas` suma `?sin_completar=true` (pendientes y en curso) y `?dias=`, la misma
+ventana del tablero, para que cada tarjeta de Seguimiento coincida con su lista.
+
+**Tarea "no realizada":** el objeto Tarea suma `sin_realizar` (calculado): no está
+completada y su evento se cerró o ya pasó, igual que su fecha prevista. No cuenta
+como vencida ni como pendiente, y no aparece al filtrar pendientes o en curso. El
+estado guardado no cambia.
+
+**Historial de estados · `GET /tareas/:id/historial`** (los tres roles; el empleado,
+solo las suyas). Respuesta 200: `[{ id_cambio_estado, estado_anterior, estado_nuevo,
+fecha_hora, usuario: { id_usuario, nombre } }]`, del más nuevo al más viejo. El objeto
+Tarea suma `fecha_primera_finalizacion`, que no se borra si la tarea se reabre.
+
+**Cambio:** suma `tareas_afectadas`, `servicios_afectados`, `tareas_sin_revisar`,
+`servicios_sin_revisar` y `revision_completa`: `false` mientras quede algo a revisar y
+`null` si el cambio no afectó nada.
+
+**El evento ya pasó:** el objeto Tarea suma `plazo_terminado` (calculado): la fecha
+del evento y la fecha prevista de la tarea ya pasaron. Cambiar el estado, editar o
+eliminar esa tarea responde 409, aunque el evento siga abierto. El día del evento
+todavía se puede.
+`/seguimiento/resumen` y los indicadores suman `tareas_sin_realizar`.
+
+`/seguimiento/proximos-eventos` suma `sede_acordada`. El inicio la usa, con `?dias=365`,
+para mostrar el evento más cercano y cuántos días faltan.
+
+**El filtro del tablero:** `?dias` ahora se aplica a `/seguimiento/resumen`,
+`/tareas-vencidas` y `/servicios-sin-confirmar`, además de a los próximos eventos:
+cuentan los eventos abiertos con fecha de acá a esos días, más los que ya pasaron y
+siguen abiertos. Las solicitudes pendientes se filtran por su fecha prevista. Sin
+`?dias`, las tarjetas y las listas miran todos los eventos abiertos.
+
+## Validación de datos (agregado a todas las fases)
+
+Todo POST y PUT limpia los textos: un campo hecho de espacios cuenta como vacío y
+un opcional vacío se guarda `null`. Errores 400 nuevos:
+
+- `"El email no es valido"` · `"El telefono no es valido"`
+- `"El CUIT tiene que tener 11 digitos"` · `"El DNI/CUIT tiene que tener 7, 8 u 11 digitos"`
+- `"La fecha no puede ser mas de 60 meses despues de hoy"`
+- `"La cantidad de asistentes no puede superar 10000"`
+- `"Ya existe un proveedor con ese CUIT"` · `"Ya existe un proveedor con esa razon social"`
+- `"Ya existe una empresa con ese nombre"`
+- `"El cliente ya tiene una solicitud de ese tipo para esa fecha"`
+- `"Ese renglon ya esta en el presupuesto"` · `"Ese servicio ya esta acordado en el evento"`
+- `"Ya existe esa tarea, con el mismo responsable y la misma fecha"`
+
+409 · `"El cliente ya tiene un evento de ese tipo en esa fecha"` al aceptar un
+presupuesto o al cambiar la fecha del evento.
+
+409 · `"La sede ya esta ocupada por otro evento en esa fecha"` al aceptar un
+presupuesto o al cambiar la fecha o la sede: un salón no se ocupa dos veces el
+mismo día. Vale por empresa y para eventos abiertos.
+
+Los documentos se guardan normalizados (`38123456`, `30-71234567-8`) y los
+emails en minúsculas. El login no distingue mayúsculas en el email.
 
 ## Historial de cambios del contrato
 

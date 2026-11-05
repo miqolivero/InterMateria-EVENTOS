@@ -18,12 +18,13 @@ const Catalogos = lazy(() => import("./paginas/Catalogo").then((m) => ({ default
 const Solicitudes = lazy(() => import("./paginas/Solicitudes"));
 const SolicitudDetalle = lazy(() => import("./paginas/Solicitudes").then((m) => ({ default: m.SolicitudDetalle })));
 const Presupuesto = lazy(() => import("./paginas/Presupuesto"));
+const PresupuestoPublico = lazy(() => import("./paginas/PresupuestoPublico"));
 const Eventos = lazy(() => import("./paginas/Eventos"));
 const EventoDetalle = lazy(() => import("./paginas/Eventos").then((m) => ({ default: m.EventoDetalle })));
 const MisTareas = lazy(() => import("./componentes/TareasEvento").then((m) => ({ default: m.MisTareas })));
 const MisTareasEmpleado = lazy(() => import("./paginas/MisTareasEmpleado"));
 const Seguimiento = lazy(() => import("./paginas/Seguimiento"));
-const EventosPorEstado = lazy(() => import("./paginas/EventosPorEstado"));
+const Tareas = lazy(() => import("./paginas/Tareas"));
 const MisEventos = lazy(() => import("./paginas/MisEventos"));
 const MiEventoDetalle = lazy(() => import("./paginas/MisEventos").then((m) => ({ default: m.MiEventoDetalle })));
 const Usuarios = lazy(() => import("./paginas/Usuarios"));
@@ -51,6 +52,8 @@ function MisTareasSegunRol() {
 export default function App() {
   return <Suspense fallback={<div className="pantalla-espera"><Spin size="large" /><p>Cargando tu espacio…</p></div>}><Routes>
     <Route path="/login" element={<Login />} />
+    {/* Sin login: el presupuesto que ve el cliente con su link */}
+    <Route path="/p/:token" element={<PresupuestoPublico />} />
     {/* Sin layout: si la contraseña es obligatoria, no se muestra ningún menú */}
     <Route path="/cambiar-password" element={<RutaProtegida><CambiarPassword /></RutaProtegida>} />
     <Route element={<RutaProtegida><LayoutSegunRol /></RutaProtegida>}>
@@ -58,7 +61,7 @@ export default function App() {
       <Route path="/superadmin/empresas" element={<EmpresasSistema />} />
       <Route path="/superadmin/empresas/:id" element={<EmpresaSistema />} />
       <Route path="/seguimiento" element={<Seguimiento />} />
-      <Route path="/eventos-por-estado" element={<EventosPorEstado />} />
+      <Route path="/tareas" element={<Tareas />} />
       <Route path="/mis-tareas" element={<MisTareasSegunRol />} />
       <Route path="/mis-eventos" element={<MisEventos />} />
       <Route path="/mis-eventos/:id" element={<MiEventoDetalle />} />

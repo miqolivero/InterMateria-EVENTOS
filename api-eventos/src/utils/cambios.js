@@ -3,13 +3,14 @@
 // Criterio del cliente: el sistema REGISTRA lo que cambia y AVISA que
 // compromisos quedaron afectados, pero no decide nada solo. Por eso aca no hay
 // ningun UPDATE sobre tareas ni proveedores: solo se escribe en cambios_evento
-// y en afectados_cambio.
+// y en afectados_cambio. Los actualiza una persona, al revisar.
 //
 // Todo se llama con el client de la transaccion del cambio: si el registro
 // falla, el ROLLBACK deshace tambien el cambio. No puede quedar un evento
 // modificado sin su registro, ni un registro de algo que no cambio.
 
 import { esIdValido } from "./validaciones.js";
+import { plazoTerminado } from "./indicadores.js";
 
 export const MENSAJES_CAMBIO = {
   motivoObligatorio: "El motivo del cambio es obligatorio",
@@ -103,7 +104,20 @@ export const selectCambio = ({ conValores = true } = {}) => `
          (SELECT COUNT(*)::int FROM afectados_cambio ac
           WHERE ac.id_cambio = ce.id_cambio) AS afectados,
          (SELECT COUNT(*)::int FROM afectados_cambio ac
-          WHERE ac.id_cambio = ce.id_cambio AND ac.revisado = FALSE) AS pendientes_revision
+          WHERE ac.id_cambio = ce.id_cambio AND ac.revisado = FALSE) AS pendientes_revision,
+         (SELECT COUNT(*)::int FROM afectados_cambio ac
+          WHERE ac.id_cambio = ce.id_cambio AND ac.id_tarea IS NOT NULL) AS tareas_afectadas,
+         (SELECT COUNT(*)::int FROM afectados_cambio ac
+          WHERE ac.id_cambio = ce.id_cambio AND ac.id_tarea IS NULL) AS servicios_afectados,
+         (SELECT COUNT(*)::int FROM afectados_cambio ac
+          WHERE ac.id_cambio = ce.id_cambio AND ac.id_tarea IS NOT NULL AND ac.revisado = FALSE) AS tareas_sin_revisar,
+         (SELECT COUNT(*)::int FROM afectados_cambio ac
+          WHERE ac.id_cambio = ce.id_cambio AND ac.id_tarea IS NULL AND ac.revisado = FALSE) AS servicios_sin_revisar,
+         -- Un cambio no esta revisado mientras le quede algun compromiso a revisar.
+         -- Sin afectados no hay nada que revisar: NULL, ni si ni no.
+         CASE WHEN NOT EXISTS (SELECT 1 FROM afectados_cambio ac WHERE ac.id_cambio = ce.id_cambio) THEN NULL
+              ELSE NOT EXISTS (SELECT 1 FROM afectados_cambio ac
+                               WHERE ac.id_cambio = ce.id_cambio AND ac.revisado = FALSE) END AS revision_completa
   FROM cambios_evento ce
   JOIN usuarios u ON u.id_usuario = ce.id_usuario
   LEFT JOIN servicios_x_evento sxc ON sxc.id_servicio_x_evento = ce.id_servicio_x_evento
@@ -129,11 +143,13 @@ export const SELECT_REVISION = `
   SELECT ac.id_afectado, ce.id_evento,
          CASE WHEN ac.id_tarea IS NULL THEN 'servicio' ELSE 'tarea' END AS tipo,
          ac.id_servicio_x_evento, svr.nombre AS nombre_servicio,
+         sxr.id_proveedor, sxr.estado_proveedor, sxr.estado_servicio,
          ac.id_tarea, tr.descripcion AS descripcion_tarea,
+         tr.fecha_prevista, tr.estado_tarea, ${plazoTerminado("tr")} AS plazo_terminado,
          CASE WHEN er.id_empleado IS NULL THEN NULL
               ELSE json_build_object('id_empleado', er.id_empleado,
                                      'nombre', er.nombre || ' ' || er.apellido) END AS responsable,
-         ac.revisado, ac.nota_revision,
+         ac.revisado, ac.nota_revision, ac.cambios_revision,
          CASE WHEN ur.id_usuario IS NULL THEN NULL
               ELSE json_build_object('id_usuario', ur.id_usuario, 'nombre', ur.nombre) END AS revisado_por,
          ac.fecha_revision,

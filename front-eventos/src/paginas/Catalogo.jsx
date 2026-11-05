@@ -4,11 +4,14 @@ import { PlusOutlined, ReloadOutlined } from "@ant-design/icons";
 import { listarCatalogo, obtenerCatalogo, crearCatalogo, editarCatalogo, activarCatalogo, obtenerServiciosProveedor, guardarServiciosProveedor, darAcceso } from "../servicios/catalogosService.js";
 import { useConsulta } from "../contexto/useConsulta.js";
 import { useAccion } from "../contexto/useAccion.js";
+import { useFiltros } from "../contexto/useFiltros.js";
 import { catalogos } from "../utils/catalogos.js";
 import { camposPermitidos, fechaAPI, nombreCompleto } from "../utils/formularios.js";
 import { formatearFecha } from "../utils/formato.js";
+import { ordenFecha } from "../utils/tablas.js";
 import EncabezadoPagina from "../componentes/EncabezadoPagina";
 import ErrorConsulta from "../componentes/ErrorConsulta";
+import LimpiarFiltros from "../componentes/LimpiarFiltros";
 import FormularioCatalogo from "../componentes/FormularioCatalogo";
 import { EtiquetaRol } from "../componentes/TablaUsuarios";
 import { opcionesRol, reglasPassword } from "../utils/usuarios.js";
@@ -67,8 +70,7 @@ function ServiciosProveedor({ proveedor, cerrar, actualizado }) {
 
 export default function Catalogo({ recurso, sinTitulo = false }) {
   const config = catalogos[recurso];
-  const [buscar, setBuscar] = useState("");
-  const [activo, setActivo] = useState("true");
+  const { filtros: { buscar = "", activo }, filtrar, limpiar, hayFiltros, clave } = useFiltros({ activo: "true" }, { activo: "true" });
   const consulta = useConsulta(useCallback(async () => (await listarCatalogo(recurso, { buscar, ...(activo === "todos" ? {} : { activo }) })).data, [recurso, buscar, activo]));
   const [editor, setEditor] = useState(null);
   const [proveedor, setProveedor] = useState(null);
@@ -94,12 +96,12 @@ export default function Catalogo({ recurso, sinTitulo = false }) {
   const columnas = [
     ...(recurso === "empleados" ? [{ title: "Legajo", dataIndex: "legajo" }] : []),
     { title: recurso === "proveedores" ? "Razón social" : "Nombre", key: "nombre", render: (_, fila) => recurso === "proveedores" ? fila.razon_social : nombreCompleto(fila) },
-    ...(["tipos", "servicios"].includes(recurso) ? [{ title: "Descripción", dataIndex: "descripcion", render: (v) => v || "—" }] : [
+    ...(recurso === "sedes" ? [{ title: "Dirección", dataIndex: "direccion", render: (v) => v || "—" }] : ["tipos", "servicios"].includes(recurso) ? [{ title: "Descripción", dataIndex: "descripcion", render: (v) => v || "—" }] : [
       { title: "Email", dataIndex: "email", render: (v) => v || "—" }, { title: "Teléfono", dataIndex: "telefono", render: (v) => v || "—" }
     ]),
     ...(recurso === "clientes" ? [{ title: "DNI / CUIT", dataIndex: "dni_cuit" }] : []),
     ...(recurso === "proveedores" ? [{ title: "Servicios", dataIndex: "servicios", render: (servicios) => servicios?.map((s) => s.nombre).join(", ") || "Sin asignar" }] : []),
-    ...(recurso === "empleados" ? [{ title: "Cargo", dataIndex: "cargo" }, { title: "Ingreso", dataIndex: "fecha_inicio", render: formatearFecha },
+    ...(recurso === "empleados" ? [{ title: "Cargo", dataIndex: "cargo" }, { title: "Ingreso", dataIndex: "fecha_inicio", render: formatearFecha, ...ordenFecha("fecha_inicio") },
       { title: "Acceso", dataIndex: "acceso", render: (a) => a ? <Space size={4} wrap><EtiquetaRol rol={a.rol} />{!a.activo && <Tag variant="outlined">Inactivo</Tag>}</Space>
         : <Typography.Text type="secondary">Sin acceso</Typography.Text> }] : []),
     { title: "Estado", dataIndex: "activo", render: (v) => <Tag color={v ? "green" : "default"}>{v ? "Activo" : "Inactivo"}</Tag> },
@@ -117,9 +119,10 @@ export default function Catalogo({ recurso, sinTitulo = false }) {
   return <>
     {!sinTitulo && <EncabezadoPagina titulo={config.titulo} />}
     <ErrorConsulta {...consulta} />
-    <Card><div className="barra-tabla">
-      <Input.Search placeholder="Buscar" allowClear onSearch={setBuscar} style={{ maxWidth: 320 }} aria-label={`Buscar ${config.titulo.toLowerCase()}`} />
-      <Space wrap><Select aria-label="Estado" value={activo} onChange={setActivo} style={{ minWidth: 130 }} options={[{ value: "true", label: "Activos" }, { value: "false", label: "Inactivos" }, { value: "todos", label: "Todos" }]} />
+    <Card><div className="barra-tabla" key={clave}>
+      <Input.Search placeholder="Buscar" allowClear onSearch={(v) => filtrar("buscar", v)} style={{ maxWidth: 320 }} aria-label={`Buscar ${config.titulo.toLowerCase()}`} />
+      <Space wrap><Select aria-label="Estado" value={activo} onChange={(v) => filtrar("activo", v)} style={{ minWidth: 130 }} options={[{ value: "true", label: "Activos" }, { value: "false", label: "Inactivos" }, { value: "todos", label: "Todos" }]} />
+        <LimpiarFiltros activo={hayFiltros} alTocar={limpiar} />
         <Button icon={<ReloadOutlined />} aria-label="Actualizar" onClick={consulta.recargar} loading={consulta.cargando} />
         <Button type="primary" icon={<PlusOutlined />} disabled={ocupado} onClick={() => setEditor({})}>Nuevo {config.singular}</Button></Space>
     </div><Table rowKey={config.id} loading={consulta.cargando} dataSource={consulta.datos || []} columns={columnas} scroll={{ x: 900 }}
@@ -143,6 +146,7 @@ export function Catalogos() {
   return <><EncabezadoPagina titulo="Catálogos" /><Tabs type="card" destroyOnHidden items={[
     { key: "tipos", label: "Tipos de evento", children: <Catalogo recurso="tipos" sinTitulo /> },
     { key: "servicios", label: "Servicios", children: <Catalogo recurso="servicios" sinTitulo /> },
+    { key: "sedes", label: "Sedes", children: <Catalogo recurso="sedes" sinTitulo /> },
     { key: "proveedores", label: "Proveedores", children: <Catalogo recurso="proveedores" sinTitulo /> }
   ]} /></>;
 }

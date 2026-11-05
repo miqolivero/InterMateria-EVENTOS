@@ -1,7 +1,7 @@
 import api from "./axiosConfig.js";
 
 // Lista cerrada: los componentes no construyen rutas a partir de datos del usuario.
-const rutas = { clientes: "/clientes", tipos: "/tipos-eventos", servicios: "/servicios", proveedores: "/proveedores", empleados: "/empleados" };
+const rutas = { clientes: "/clientes", tipos: "/tipos-eventos", servicios: "/servicios", sedes: "/sedes", proveedores: "/proveedores", empleados: "/empleados" };
 export const listarCatalogo = (recurso, params = {}) => api.get(rutas[recurso], { params });
 export const obtenerCatalogo = (recurso, id) => api.get(`${rutas[recurso]}/${id}`);
 export const crearCatalogo = (recurso, datos) => api.post(rutas[recurso], datos);

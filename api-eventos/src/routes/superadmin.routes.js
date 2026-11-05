@@ -11,6 +11,7 @@ import {
   actualizarUsuarioDeEmpresa,
   resetearPasswordDeEmpresa
 } from "../controllers/superadmin.controller.js";
+import { datosEmpresa, datosEmpresaNueva, datosAdminNuevo, datosUsuario } from "../middlewares/datos.middleware.js";
 import { validarParamId } from "../middlewares/validarId.middleware.js";
 
 const router = Router();
@@ -24,14 +25,14 @@ router.get("/resumen", obtenerResumen);
 
 router.get("/empresas", obtenerEmpresas);
 router.get("/empresas/:id", obtenerEmpresaPorId);
-router.post("/empresas", crearEmpresa);
-router.put("/empresas/:id", editarEmpresa);
+router.post("/empresas", datosEmpresaNueva, datosAdminNuevo, crearEmpresa);
+router.put("/empresas/:id", datosEmpresa, editarEmpresa);
 router.patch("/empresas/:id/activo", cambiarActivoEmpresa);
 router.delete("/empresas/:id", eliminarEmpresa);
 
 // Soporte: los usuarios de cada empresa
-router.post("/empresas/:id/usuarios", crearUsuarioDeEmpresa);
-router.patch("/empresas/:id/usuarios/:idUsuario", actualizarUsuarioDeEmpresa);
+router.post("/empresas/:id/usuarios", datosUsuario, crearUsuarioDeEmpresa);
+router.patch("/empresas/:id/usuarios/:idUsuario", datosUsuario, actualizarUsuarioDeEmpresa);
 router.put("/empresas/:id/usuarios/:idUsuario/password", resetearPasswordDeEmpresa);
 
 export default router;

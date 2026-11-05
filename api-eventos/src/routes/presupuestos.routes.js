@@ -10,6 +10,7 @@ import {
   rechazarPresupuesto
 } from "../controllers/presupuestos.controller.js";
 import { aceptarPresupuesto } from "../controllers/eventos.controller.js";
+import { datosRenglon, datosEvento } from "../middlewares/datos.middleware.js";
 import { validarParamId } from "../middlewares/validarId.middleware.js";
 
 const router = Router();
@@ -28,8 +29,8 @@ router.get("/:id", obtenerPresupuestoPorId);
 router.put("/:id", editarPresupuesto);
 
 // Renglones del detalle (solo en borrador)
-router.post("/:id/detalle", agregarRenglon);
-router.put("/:id/detalle/:idDetalle", editarRenglon);
+router.post("/:id/detalle", datosRenglon, agregarRenglon);
+router.put("/:id/detalle/:idDetalle", datosRenglon, editarRenglon);
 router.delete("/:id/detalle/:idDetalle", eliminarRenglon);
 
 // Cambios de estado y versiones
@@ -39,6 +40,6 @@ router.patch("/:id/rechazar", rechazarPresupuesto);
 
 // Fase 5: aceptar crea el evento (regla 4). La logica vive en el controlador
 // de eventos porque lo que se crea y se devuelve es un Evento.
-router.post("/:id/aceptar", aceptarPresupuesto);
+router.post("/:id/aceptar", datosEvento, aceptarPresupuesto);
 
 export default router;

@@ -6,6 +6,7 @@ import {
   editarCliente,
   cambiarActivoCliente
 } from "../controllers/clientes.controller.js";
+import { datosCliente } from "../middlewares/datos.middleware.js";
 import { validarParamId } from "../middlewares/validarId.middleware.js";
 
 const router = Router();
@@ -18,8 +19,8 @@ router.param("id", validarParamId("Cliente no encontrado"));
 
 router.get("/", obtenerClientes);
 router.get("/:id", obtenerClientePorId);
-router.post("/", crearCliente);
-router.put("/:id", editarCliente);
+router.post("/", datosCliente, crearCliente);
+router.put("/:id", datosCliente, editarCliente);
 
 // No hay DELETE: la baja es logica (ver docs/API.md)
 router.patch("/:id/activo", cambiarActivoCliente);
