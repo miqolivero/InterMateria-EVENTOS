@@ -37,6 +37,7 @@ hay registro público: las cuentas las crea el superadmin o el admin de la empre
 - [API: ejecución, endpoints y cuentas de demo](api-eventos/README.md).
 - [Frontend: pantallas, pruebas y vista ficticia](front-eventos/README.md).
 - [Contrato de la API](docs/API.md) y [decisiones de diseño](docs/DECISIONES.md).
+- [Base de datos: DER y cambios del modelo](docs/base-de-datos/README.md).
 - [Roadmap](ROADMAP.md), [estado de integración](front-eventos/INTEGRACION-BACKEND.md)
   y [recorrido de demostración](front-eventos/DEMO.md).
 
