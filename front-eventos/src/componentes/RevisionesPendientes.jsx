@@ -35,7 +35,7 @@ function CamposTarea({ esEmpleado }) {
     {!esEmpleado && <Form.Item name="fecha_prevista" label="Fecha prevista"><DatePicker format="DD/MM/YYYY" allowClear={false} /></Form.Item>}
     {!esEmpleado && <Form.Item name="id_empleado_responsable" label="Responsable">
       <Select showSearch optionFilterProp="label" loading={empleados.cargando} options={(empleados.datos || []).map((e) => ({ value: e.id_empleado, label: nombreCompleto(e) }))} /></Form.Item>}
-    <Form.Item name="estado_tarea" label="Estado"><Select options={opcionesEstado(["pendiente", "en_curso", "completada"])} /></Form.Item>
+    <Form.Item name="estado_tarea" label="Estado"><Select options={opcionesEstado(esEmpleado ? ["pendiente", "en_curso", "completada"] : ["pendiente", "en_curso", "completada", "cancelada"])} /></Form.Item>
   </>;
 }
 
@@ -59,7 +59,7 @@ function ModalRevision({ revision, cerrar, guardado }) {
       const r = await ejecutar(() => marcarRevisado(revision.id_afectado, v.nota_revision.trim(), bloqueada ? {} : cambiosDe(revision, v)), "Revisión registrada.");
       if (r.ok) { cerrar(); guardado(); }
     }}>
-      {esTarea && !bloqueada && <CamposTarea esEmpleado={usuario?.rol === EMPLEADO} />}
+      {esTarea && !bloqueada && !(usuario?.rol === EMPLEADO && revision.estado_tarea === "cancelada") && <CamposTarea esEmpleado={usuario?.rol === EMPLEADO} />}
       {!esTarea && revision.estado_servicio !== "cancelado" && <Form.Item name="estado_proveedor" label="Estado del proveedor">
         <Select options={opcionesEstado(ESTADOS_PROVEEDOR).map((o) => ({ ...o, disabled: !revision.id_proveedor && ["confirmado", "completado"].includes(o.value) }))} /></Form.Item>}
       <Form.Item name="nota_revision" label="Qué se revisó" rules={[{ required: true, whitespace: true, message: "La nota es obligatoria: deja constancia de la revisión." }]}>

@@ -15,8 +15,10 @@ export const CONDICION_PLAZO_TERMINADO = plazoTerminado();
 
 // "No realizada": la tarea no se completo y ya no tiene sentido esperarla, porque
 // el evento se cerro o ya paso. No figura como pendiente ni como vencida, pero se
-// calcula y no se guarda: el sistema no cambia el estado solo.
-export const CONDICION_SIN_REALIZAR = `(t.estado_tarea <> 'completada'
+// calcula y no se guarda: el sistema no cambia el estado solo. Una cancelada ya tiene
+// su respuesta: no se espera ni falta.
+export const TAREA_SIN_TERMINAR = "t.estado_tarea NOT IN ('completada', 'cancelada')";
+export const CONDICION_SIN_REALIZAR = `(${TAREA_SIN_TERMINAR}
    AND (e.estado IN ('realizado', 'cancelado') OR ${CONDICION_PLAZO_TERMINADO}))`;
 
 // Regla 1: una tarea vencida tiene fecha prevista pasada y no esta completada.
@@ -25,7 +27,7 @@ export const CONDICION_SIN_REALIZAR = `(t.estado_tarea <> 'completada'
 // estar "no realizada".
 export const CONDICION_VENCIDA = `(t.fecha_prevista IS NOT NULL
    AND t.fecha_prevista < CURRENT_DATE
-   AND t.estado_tarea <> 'completada'
+   AND ${TAREA_SIN_TERMINAR}
    AND NOT ${CONDICION_SIN_REALIZAR})`;
 
 // Servicios del evento (alias sxe). Un servicio cancelado no cuenta en ningun
@@ -86,7 +88,7 @@ export const JOIN_INDICADORES = `
            rv.pendientes_revision,
            (sv.servicios_sin_confirmar > 0 OR rv.pendientes_revision > 0) AS alerta
     FROM (SELECT COUNT(*) FILTER (WHERE t.estado_tarea = 'completada')::int AS tareas_completadas,
-                 COUNT(*)::int AS tareas_total,
+                 COUNT(*) FILTER (WHERE t.estado_tarea <> 'cancelada')::int AS tareas_total,
                  COUNT(*) FILTER (WHERE ${CONDICION_VENCIDA})::int AS tareas_vencidas,
                  COUNT(*) FILTER (WHERE ${CONDICION_SIN_REALIZAR})::int AS tareas_sin_realizar
           FROM tareas t WHERE t.id_evento = e.id_evento) ta,

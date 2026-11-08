@@ -378,7 +378,7 @@ CREATE TABLE tareas (
     -- La primera vez que se termino: no se borra si la tarea se reabre
     fecha_primera_finalizacion DATE,
     estado_tarea VARCHAR(20) NOT NULL DEFAULT 'pendiente'
-        CHECK (estado_tarea IN ('pendiente', 'en_curso', 'completada')),
+        CHECK (estado_tarea IN ('pendiente', 'en_curso', 'completada', 'cancelada')),
     observaciones TEXT
 );
 

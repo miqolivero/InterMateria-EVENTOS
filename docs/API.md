@@ -717,10 +717,13 @@ Objeto **Evento (detalle)**:
     "cantidad_asistentes": 80,
     "preferencias": "Temática años 80, menú sin TACC para 5 personas"
   },
-  "presupuesto_aceptado": { "id_presupuesto": 2, "numero_version": 2, "importe_total": 2100000 }
+  "presupuesto_aceptado": { "id_presupuesto": 2, "numero_version": 2, "importe_total": 2100000 },
+  "total_acordado": 2100000
 }
 ```
 
+- `total_acordado` suma el importe al cliente de los servicios acordados, sin los
+  cancelados. El `importe_total` del presupuesto aceptado no cambia.
 - `editable` = `true` si el estado es `confirmado` o `en_preparacion`.
 - `coordinador` puede ser `null`.
 
@@ -760,7 +763,7 @@ Errores:
 - 400 · `"La fecha del evento es obligatoria"` (también si no tiene formato
   `YYYY-MM-DD` o no existe)
 - 400 · `"La fecha del evento no puede ser anterior a hoy"`
-- 400 · `"El coordinador no es un empleado activo de la empresa"`
+- 400 · `"El coordinador tiene que ser un empleado activo con usuario de administrador o coordinador"`
 - 409 · `"Solo se puede aceptar un presupuesto presentado"`
 - 409 · `"La solicitud ya tiene un evento"`
 - 409 · `"La solicitud esta <estado> y no admite presupuestos"` (si la
@@ -2311,6 +2314,11 @@ y `PUT /eventos/:id`. 400 · `"La sede no existe o esta inactiva"` y
 en las respuestas: son una copia del nombre. Renombrar una sede no cambia lo ya
 acordado, y un evento puede conservar una sede dada de baja.
 
+**Salón que reservó el cliente:** esas mismas rutas aceptan `lugar_externo` (texto, hasta
+200 caracteres) en lugar de `id_sede`. Se guarda en `sede_prevista` o `sede_acordada`, con
+`id_sede` en `null`, y no entra en la regla de un evento por salón y por día. Mandar los
+dos responde 400. Sin ninguno, la sede queda a definir.
+
 **Link del presupuesto · `/api/publico`** (sin login):
 
 - `GET /publico/presupuestos/:token`: empresa, cliente, evento, servicios con su
@@ -2348,6 +2356,12 @@ Tarea suma `fecha_primera_finalizacion`, que no se borra si la tarea se reabre.
 **Cambio:** suma `tareas_afectadas`, `servicios_afectados`, `tareas_sin_revisar`,
 `servicios_sin_revisar` y `revision_completa`: `false` mientras quede algo a revisar y
 `null` si el cambio no afectó nada.
+
+**Tarea cancelada:** `estado_tarea` suma `cancelada`. No cuenta como pendiente, vencida ni
+no realizada, ni en `tareas_total`, y no aparece en `/tareas/mias`. Se conserva, con su
+historial. Solo admin y coordinador cancelan o reabren una tarea (empleado: 403).
+`PATCH /servicios-evento/:id/cancelar` acepta `tareas_canceladas` (lista de ids, opcional):
+tareas de ese servicio sin terminar, canceladas en la misma transacción. Otra tarea: 400.
 
 **El evento ya pasó:** el objeto Tarea suma `plazo_terminado` (calculado): la fecha
 del evento y la fecha prevista de la tarea ya pasaron. Cambiar el estado, editar o

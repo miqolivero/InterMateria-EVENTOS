@@ -5,9 +5,10 @@ import { listarCatalogo, crearCatalogo } from "../servicios/catalogosService.js"
 import { crearSolicitud, editarSolicitud } from "../servicios/operacionService.js";
 import { useConsulta } from "../contexto/useConsulta.js";
 import { useAccion } from "../contexto/useAccion.js";
-import { camposPermitidos, fechaAPI, nombreCompleto, opcionesActivos, sinFechasPasadas } from "../utils/formularios.js";
+import { camposPermitidos, fechaAPI, lugarDelForm, lugarInicial, nombreCompleto, opcionesActivos, sinFechasPasadas } from "../utils/formularios.js";
 import ErrorConsulta from "./ErrorConsulta";
 import FormularioCatalogo from "./FormularioCatalogo";
+import CamposLugar from "./CamposLugar";
 
 export default function EditorSolicitud({ datos, cerrar, guardado }) {
   const [form] = Form.useForm();
@@ -18,9 +19,9 @@ export default function EditorSolicitud({ datos, cerrar, guardado }) {
     const [clientes, tipos, sedes] = await Promise.all([listarCatalogo("clientes"), listarCatalogo("tipos"), listarCatalogo("sedes")]);
     return { clientes: clientes.data, tipos: tipos.data, sedes: sedes.data };
   }, []));
-  useEffect(() => { form.setFieldsValue({ ...datos, fecha_evento_prevista: datos.fecha_evento_prevista ? dayjs(datos.fecha_evento_prevista) : null }); }, [datos, form]);
+  useEffect(() => { form.setFieldsValue({ ...datos, ...lugarInicial(datos), fecha_evento_prevista: datos.fecha_evento_prevista ? dayjs(datos.fecha_evento_prevista) : null }); }, [datos, form]);
   async function guardar(valores) {
-    const body = { ...camposPermitidos(valores, ["id_cliente", "id_tipo_evento", "cantidad_asistentes", "id_sede", "preferencias"]), fecha_evento_prevista: fechaAPI(valores.fecha_evento_prevista) };
+    const body = { ...camposPermitidos(valores, ["id_cliente", "id_tipo_evento", "cantidad_asistentes", "preferencias"]), ...lugarDelForm(valores), fecha_evento_prevista: fechaAPI(valores.fecha_evento_prevista) };
     const respuesta = await ejecutar(() => datos.id_solicitud ? editarSolicitud(datos.id_solicitud, body) : crearSolicitud(body));
     if (respuesta.ok) { guardado(respuesta.datos); cerrar(); }
   }
@@ -39,10 +40,8 @@ export default function EditorSolicitud({ datos, cerrar, guardado }) {
         </Form.Item>
         <Form.Item label="Fecha prevista" name="fecha_evento_prevista" rules={[{ required: true }]}><DatePicker format="DD/MM/YYYY" disabledDate={sinFechasPasadas} /></Form.Item>
         <Form.Item label="Asistentes" name="cantidad_asistentes" rules={[{ required: true }, { type: "integer", min: 1, max: 10000, message: "Entre 1 y 10.000." }]}><InputNumber min={1} max={10000} precision={0} /></Form.Item>
-        <Form.Item label="Sede prevista" name="id_sede" extra="Los salones se cargan en Catálogos → Sedes. Pedirlo no lo reserva: se ocupa al confirmar el evento.">
-          <Select allowClear showSearch optionFilterProp="label" placeholder="A definir" notFoundContent="No hay sedes cargadas"
-            options={opcionesActivos(catalogos.datos?.sedes, "id_sede", "nombre", datos.id_sede)} />
-        </Form.Item>
+        <CamposLugar sedes={catalogos.datos?.sedes} etiqueta="Sede prevista" idActual={datos.id_sede}
+          ayuda="Los salones se cargan en Catálogos → Sedes. Pedirlo no lo reserva: se ocupa al confirmar el evento." />
         <Form.Item label="Preferencias" name="preferencias"><Input.TextArea rows={3} /></Form.Item>
       </Form>
     </Modal>

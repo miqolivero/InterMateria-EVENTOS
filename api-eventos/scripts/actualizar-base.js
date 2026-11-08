@@ -100,7 +100,9 @@ try {
     "ALTER TABLE eventos ALTER COLUMN cantidad_asistentes SET NOT NULL",
     "ALTER TABLE eventos DROP CONSTRAINT IF EXISTS eventos_cantidad_asistentes_check",
     "ALTER TABLE eventos ADD CONSTRAINT eventos_cantidad_asistentes_check CHECK (cantidad_asistentes > 0)",
-    "CREATE UNIQUE INDEX IF NOT EXISTS uq_tareas_servicio_paso ON tareas(id_servicio_x_evento, id_tipo_tarea) WHERE id_tipo_tarea IS NOT NULL"
+    "CREATE UNIQUE INDEX IF NOT EXISTS uq_tareas_servicio_paso ON tareas(id_servicio_x_evento, id_tipo_tarea) WHERE id_tipo_tarea IS NOT NULL",
+    "ALTER TABLE tareas DROP CONSTRAINT IF EXISTS tareas_estado_tarea_check",
+    "ALTER TABLE tareas ADD CONSTRAINT tareas_estado_tarea_check CHECK (estado_tarea IN ('pendiente', 'en_curso', 'completada', 'cancelada'))"
   ]) await cliente.query(sql);
   // Datos que no se pueden repetir. Los emails se pasan a minusculas antes del
   // indice. Si ya hay datos repetidos, el indice falla, el ROLLBACK deja la base

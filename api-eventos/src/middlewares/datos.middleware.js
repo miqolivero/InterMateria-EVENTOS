@@ -100,9 +100,9 @@ export const datosAdminNuevo = validarDatos({ nombre: texto, email }, "admin");
 export const datosEmpresaNueva = validarDatos({ nombre: texto, cuit, email, telefono, direccion: texto }, "empresa");
 export const datosEmpresa = validarDatos({ nombre: texto, cuit, email, telefono, direccion: texto });
 export const datosSolicitud = validarDatos({ fecha_evento_prevista: fechaRazonable,
-  cantidad_asistentes: asistentes, preferencias: texto });
+  cantidad_asistentes: asistentes, preferencias: texto, lugar_externo: texto });
 export const datosEvento = validarDatos({ fecha_evento_confirmada: fechaRazonable,
-  cantidad_asistentes: asistentes, condiciones_acordadas: texto });
+  cantidad_asistentes: asistentes, condiciones_acordadas: texto, lugar_externo: texto });
 export const datosTarea = validarDatos({ descripcion: texto, fecha_prevista: fechaRazonable, observaciones: texto });
 export const datosRenglon = validarDatos({ descripcion: texto });
 export const datosRevision = validarDatos({ fecha_prevista: fechaRazonable });

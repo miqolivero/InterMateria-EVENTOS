@@ -53,7 +53,8 @@ function EditorTarea({ id, datos, cerrar, guardado }) {
 export function TablaTareas({ tareas, editable, actualizar, editar, mostrarEvento = false, paginar = false, cargando = false }) {
   const { ocupado, ejecutar } = useAccion();
   const [historial, setHistorial] = useState(null);
-  return <><Table rowKey="id_tarea" dataSource={tareas} loading={cargando} pagination={paginar ? { pageSize: 20, hideOnSinglePage: true } : false} scroll={{ x: 850 }} columns={[
+  return <><Table rowKey="id_tarea" dataSource={tareas} loading={cargando} pagination={paginar ? { pageSize: 20, hideOnSinglePage: true } : false} scroll={{ x: 850 }}
+    rowClassName={(t) => t.estado_tarea === "cancelada" ? "servicio-cancelado" : ""} columns={[
     { title: "Tarea", dataIndex: "descripcion", render: (v, tarea) => <Space orientation="vertical" size={4}><span>{v}</span><Space size={4} wrap>{tarea.vencida && <Tag color="red">Vencida</Tag>}
       {tarea.a_revisar && <Tag color="orange">A revisar</Tag>}</Space></Space> },
     ...(mostrarEvento ? [{ title: "Evento", key: "evento", ...ordenFecha("fecha_evento_confirmada"), render: (_, t) => <div className="servicio-nombre"><Link to={`/eventos/${t.id_evento}`}>{t.nombre_cliente || `Evento #${t.id_evento}`}</Link>
@@ -63,7 +64,7 @@ export function TablaTareas({ tareas, editable, actualizar, editar, mostrarEvent
     { title: "Finalización", dataIndex: "fecha_finalizacion", ...ordenFecha("fecha_finalizacion"), render: (v, t) => <div className="servicio-nombre"><span>{formatearFecha(v)}</span>
       {t.fecha_primera_finalizacion && t.fecha_primera_finalizacion !== v && <span className="texto-secundario">Primera vez: {formatearFecha(t.fecha_primera_finalizacion)}</span>}</div> },
     { title: "Estado", dataIndex: "estado_tarea", render: (valor, tarea) => editable && !tarea.plazo_terminado && !["realizado", "cancelado"].includes(tarea.estado_evento) ? <Select value={valor} style={{ width: 150 }} disabled={ocupado}
-      aria-label={`Estado de ${tarea.descripcion}`} options={["pendiente", "en_curso", "completada"].map((estado) => ({ value: estado,
+      aria-label={`Estado de ${tarea.descripcion}`} options={["pendiente", "en_curso", "completada", "cancelada"].map((estado) => ({ value: estado,
         label: <EstadoTag estado={estado} /> }))}
       onChange={async (estado) => { const resultado = await ejecutar(() => cambiarEstadoTarea(tarea.id_tarea, estado)); if (resultado.ok) actualizar(); }} /> : <EstadoTag estado={tarea.sin_realizar ? "sin_realizar" : valor} /> },
     { title: "", key: "historial", render: (_, t) => <Button size="small" type="link" onClick={() => setHistorial(t)}>Historial</Button> },

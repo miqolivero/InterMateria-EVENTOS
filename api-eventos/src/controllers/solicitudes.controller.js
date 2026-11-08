@@ -1,6 +1,6 @@
 import pool from "../data/db.js";
 import { responderError } from "../utils/errores.js";
-import { existeEnEmpresa, sedeDeEmpresa } from "../utils/consultas.js";
+import { existeEnEmpresa, sedeDeEmpresa, leerLugarExterno } from "../utils/consultas.js";
 import { esIdValido, esFechaValida, esVacio } from "../utils/validaciones.js";
 
 // Solicitudes: el pedido inicial del cliente, antes de cualquier presupuesto.
@@ -133,10 +133,13 @@ const validarSolicitud = async (body, idEmpresa) => {
   return null;
 };
 
-// La sede es opcional: el cliente puede no haberla decidido. Se guarda la
-// referencia y una copia del nombre. Devuelve { id_sede, sede_prevista }, o null
+// La sede es opcional: el cliente puede no haberla decidido, o tenerla reservada
+// por su cuenta (lugar_externo, sin referencia). Se guarda la referencia y una
+// copia del nombre. Devuelve { id_sede, sede_prevista }, o null
 // si la sede elegida no sirve. Pedir un salon no lo reserva: se ocupa al confirmar.
 const leerSede = async (body, idEmpresa, idActual = null) => {
+  const { lugar } = leerLugarExterno(body);
+  if (lugar) return { id_sede: null, sede_prevista: lugar };
   if (esVacio(body.id_sede)) return { id_sede: null, sede_prevista: null };
   if (!esIdValido(body.id_sede)) return null;
   const sede = await sedeDeEmpresa(pool, body.id_sede, idEmpresa, idActual);
@@ -245,6 +248,10 @@ export const crearSolicitud = async (req, res) => {
       preferencias
     } = req.body;
 
+    const { error: errorLugar } = leerLugarExterno(req.body);
+    if (errorLugar) {
+      return res.status(400).json({ mensaje: errorLugar });
+    }
     const sede = await leerSede(req.body, idEmpresa);
     if (!sede) {
       return res.status(400).json({ mensaje: MENSAJES.sedeInvalida });
@@ -312,6 +319,10 @@ export const editarSolicitud = async (req, res) => {
       "SELECT id_sede FROM solicitudes WHERE id_solicitud = $1 AND id_empresa = $2",
       [req.params.id, idEmpresa]
     );
+    const { error: errorLugar } = leerLugarExterno(req.body);
+    if (errorLugar) {
+      return res.status(400).json({ mensaje: errorLugar });
+    }
     const sede = await leerSede(req.body, idEmpresa, actuales[0]?.id_sede ?? null);
     if (!sede) {
       return res.status(400).json({ mensaje: MENSAJES.sedeInvalida });

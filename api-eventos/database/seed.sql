@@ -329,7 +329,7 @@ INSERT INTO detalle_presupuesto (id_detalle, id_presupuesto, id_servicio, id_pro
 INSERT INTO eventos (id_evento, id_empresa, id_solicitud, id_presupuesto_aceptado,
                      id_empleado_coordinador, fecha_evento_confirmada, sede_acordada, cantidad_asistentes,
                      condiciones_acordadas, estado) VALUES
-(2, 1, 5, 4, 3, CURRENT_DATE + 10, 'Hotel Quinto Centenario', 150,
+(2, 1, 5, 4, 2, CURRENT_DATE + 10, 'Hotel Quinto Centenario', 150,
  'Pago contra factura a 15 días', 'confirmado');
 
 INSERT INTO servicios_x_evento (id_servicio_x_evento, id_evento, id_servicio, id_proveedor,
@@ -577,6 +577,18 @@ INSERT INTO proveedores (id_proveedor, id_empresa, razon_social, cuit, email, te
 
 INSERT INTO proveedores_x_servicio (id_proveedor, id_servicio) VALUES
 (6, 2);
+
+-- El alquiler del salon es un servicio mas: opcional y con su importe en cada
+-- presupuesto. La sede no tiene precio. Si el salon es de un tercero, ese tercero
+-- es el proveedor del renglon.
+INSERT INTO servicios (id_servicio, id_empresa, nombre, descripcion) VALUES
+(8, 1, 'Alquiler de salón', 'Uso del salón para el evento, si se cobra al cliente');
+
+INSERT INTO proveedores (id_proveedor, id_empresa, razon_social, cuit, email, telefono, observaciones) VALUES
+(7, 1, 'Hotel Quinto Centenario SA', '30-67778889-0', 'eventos@quintocentenario.com', '351-4776600', 'Tercero que alquila sus salones');
+
+INSERT INTO proveedores_x_servicio (id_proveedor, id_servicio) VALUES
+(7, 8);
 
 UPDATE servicios_x_evento
 SET id_proveedor = 6, estado_proveedor = 'pendiente', fecha_confirmacion_proveedor = NULL,

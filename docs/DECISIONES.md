@@ -493,3 +493,70 @@ cliente quiere saber que se había terminado y después surgió un problema.
 Una tarea interna que ya cambió de estado no se elimina: lo que pasó no se borra
 (decisión 16). Lo anterior a este cambio no se puede recuperar: de las tareas ya
 completadas solo se conoce su fecha de finalización.
+
+## 24. El alquiler del salón es un servicio del presupuesto
+
+La sede no tiene precio. El cliente explicó que no hay una tarifa por salón: el importe
+depende de lo que se acuerde para cada evento, como la fecha, la duración o las
+condiciones del establecimiento. Además, no siempre se cobra.
+
+Por eso se carga como un renglón más, con el servicio "Alquiler de salón": es opcional y
+lleva su costo y su importe en cada presupuesto. Si el salón es de un tercero, el
+proveedor del renglón indica quién lo proporciona, y al confirmar el evento se coordina
+como cualquier otro servicio. La sede sigue siendo el dato de dónde se hace el evento y
+de qué salón queda ocupado ese día.
+
+**El salón lo puede tener el cliente.** Si lo reservó por su cuenta, se registra el lugar
+como texto (`lugar_externo`), sin agregarlo al catálogo, y no se presupuesta alquiler. No
+entra en la regla de un evento por salón y por día: esa regla cuida los salones que maneja
+la empresa, y la disponibilidad de ese lugar la resolvió el cliente.
+
+**Alternativa descartada:** un precio en la tabla `sedes`. Obligaría a corregirlo evento
+por evento y, si cambiara, no quedaría claro cuál se le ofreció a cada cliente.
+
+## 25. Un servicio se agrega cuando el cliente ya lo aceptó
+
+Si después de confirmar el evento el cliente pide algo más, la empresa le comunica el
+importe y las condiciones por fuera del sistema y espera su respuesta. El cliente pidió
+mantenerlo así: no hay un estado "propuesto" ni una aprobación dentro del sistema.
+
+Por eso, lo que todavía se está conversando no se carga. Lo que está en
+`servicios_x_evento` con estado `acordado` es lo que el cliente aceptó. "Agregar servicio"
+lo recuerda con un aviso y pide tildar que el cliente ya aceptó. Esa casilla es un control
+de la pantalla y no se guarda: el motivo es lo que queda en el historial, y el servicio
+aparece "sin confirmar" hasta coordinarlo con el proveedor.
+
+## 26. Total acordado, separado del presupuesto aceptado
+
+El evento muestra dos números: el total del presupuesto aceptado, que es lo que se le
+ofreció al cliente y no cambia, y el total acordado hoy, que suma los servicios vigentes
+sin los cancelados. La diferencia entre los dos queda a la vista.
+
+Se calcula en el SQL y no se guarda, como los demás indicadores (decisión 15): así no
+hay que recordar actualizarlo en cada cambio. Solo lo reciben el admin y el coordinador:
+el empleado no ve importes (decisión 13).
+
+## 27. El coordinador de un evento tiene que poder operarlo
+
+Antes se podía elegir a cualquier empleado activo, aunque no tuviera usuario o tuviera el
+rol empleado, que no entra a los eventos ni a sus importes. Figuraba como coordinador sin
+poder coordinar nada. Ahora se exige un usuario activo con rol admin o coordinador.
+
+El rol sigue siendo de toda la empresa: figurar como coordinador de un evento no agrega
+permisos, solo indica quién está a cargo. El control va en la API y se aplica cuando se
+elige o se cambia al coordinador: los eventos que ya lo tienen no se tocan, y un empleado
+ya asignado se conserva hasta que alguien lo cambie.
+
+## 28. Las tareas se pueden cancelar
+
+Al cancelar un servicio, sus tareas seguían pendientes y después figuraban vencidas, y no
+había forma de cerrarlas: completarlas decía algo falso y los pasos con un proveedor no se
+borran. Ahora una tarea puede quedar `cancelada`: se conserva con su historial, pero deja
+de contar como pendiente, vencida o no realizada.
+
+Al cancelar un servicio, sus tareas sin terminar aparecen tildadas para cancelarlas en el
+mismo paso. No se hace solo, por el criterio de la decisión 14: la persona ve cuáles son y
+puede destildar alguna. Las completadas no se tocan: ese trabajo se hizo.
+
+Cancelar y reabrir lo hacen el admin y el coordinador. Para el empleado es una decisión
+sobre el evento, no el avance de su trabajo, y la tarea ya no aparece en sus pendientes.

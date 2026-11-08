@@ -10,6 +10,7 @@ import {
   CONDICION_VENCIDA,
   CONDICION_SIN_REALIZAR,
   CONDICION_PLAZO_TERMINADO,
+  TAREA_SIN_TERMINAR,
   servicioARevisar,
   tareaARevisar,
   tareaPendientesRevision
@@ -44,7 +45,8 @@ const MENSAJES = {
   plazoTerminado: "El evento ya paso y la tarea no se puede modificar"
 };
 
-export const ESTADOS_TAREA = ["pendiente", "en_curso", "completada"];
+export const ESTADOS_TAREA = ["pendiente", "en_curso", "completada", "cancelada"];
+export const MENSAJE_CANCELAR_TAREA = "Solo el administrador o el coordinador pueden cancelar o reabrir una tarea cancelada";
 
 // Regla 1: la definicion vive en utils/indicadores.js. Se reexporta porque el
 // tablero de seguimiento la importa desde aca.
@@ -181,7 +183,7 @@ const agregarFiltrosDeEstado = (query, condiciones, valores) => {
   if (query.vencidas === "true") condiciones.push(CONDICION_VENCIDA);
   if (query.sin_realizar === "true") condiciones.push(CONDICION_SIN_REALIZAR);
   // Lo que falta hacer, pendiente o en curso: la tarjeta "Tareas pendientes"
-  if (query.sin_completar === "true") condiciones.push(`t.estado_tarea <> 'completada' AND NOT ${CONDICION_SIN_REALIZAR}`);
+  if (query.sin_completar === "true") condiciones.push(`${TAREA_SIN_TERMINAR} AND NOT ${CONDICION_SIN_REALIZAR}`);
 };
 
 // GET /api/tareas?id_evento=&id_empleado_responsable=&estado_tarea=&vencidas=true&sin_realizar=true&sin_completar=true&dias=
@@ -468,6 +470,10 @@ export const cambiarEstadoTarea = async (req, res) => {
     if (tarea.plazo_terminado) {
       return res.status(409).json({ mensaje: MENSAJES.plazoTerminado });
     }
+    // Cancelar es una decision sobre el evento, no el avance del trabajo de cada uno
+    if (responsableObligatorio(req.usuario) !== null && [estado_tarea, tarea.estado_tarea].includes("cancelada")) {
+      return res.status(403).json({ mensaje: MENSAJE_CANCELAR_TAREA });
+    }
 
     await client.query("BEGIN");
     const aplicado = await aplicarEstadoTarea(client, req.params.id, estado_tarea, req.usuario.id);
@@ -596,7 +602,9 @@ export const obtenerMisTareas = async (req, res) => {
   const condiciones = [
     "t.id_empleado_responsable = $1",
     "e.id_empresa = $2",
-    "e.estado = ANY($3)"
+    "e.estado = ANY($3)",
+    // Ya no es trabajo de nadie: se sigue viendo en el evento
+    "t.estado_tarea <> 'cancelada'"
   ];
   const valores = [idEmpleado, idEmpresa, ESTADOS_EVENTO_ABIERTO];
 

@@ -4,7 +4,7 @@ import dayjs from "dayjs";
 import api from "../src/servicios/axiosConfig.js";
 import * as catalogos from "../src/servicios/catalogosService.js";
 import * as operacion from "../src/servicios/operacionService.js";
-import { camposPermitidos, fechaAPI, opcionesActivos, nombreCompleto } from "../src/utils/formularios.js";
+import { camposPermitidos, fechaAPI, lugarDelForm, lugarInicial, opcionesActivos, nombreCompleto, puedeCoordinar } from "../src/utils/formularios.js";
 import { textoDiasRestantes, urgenciaDias } from "../src/utils/formato.js";
 import { ordenFecha } from "../src/utils/tablas.js";
 
@@ -78,6 +78,22 @@ test("aceptación, cierre y feedback mantienen las rutas y los campos del contra
   assert.deepEqual(peticiones.at(-1).body, { feedback_cliente: "Buena atención" });
   await operacion.resumenSeguimiento(15);
   assert.deepEqual(peticiones.at(-1).params, { dias: 15 });
+});
+
+test("el lugar del evento: salón del catálogo o reservado por el cliente", () => {
+  assert.deepEqual(lugarDelForm({ tipo_lugar: "catalogo", id_sede: 3, lugar_externo: "viejo" }), { id_sede: 3, lugar_externo: null });
+  assert.deepEqual(lugarDelForm({ tipo_lugar: "cliente", id_sede: 3, lugar_externo: " Los Álamos " }), { id_sede: null, lugar_externo: "Los Álamos" });
+  assert.equal(lugarInicial({ id_sede: 3, sede_acordada: "Las Palmas" }).tipo_lugar, "catalogo");
+  assert.deepEqual(lugarInicial({ id_sede: null, sede_prevista: "Los Álamos" }), { tipo_lugar: "cliente", id_sede: null, lugar_externo: "Los Álamos" });
+  assert.equal(lugarInicial({}).tipo_lugar, "catalogo");
+});
+
+test("coordinador de un evento: solo con usuario activo que pueda operarlo", () => {
+  assert.equal(puedeCoordinar({ acceso: { rol: "admin", activo: true } }), true);
+  assert.equal(puedeCoordinar({ acceso: { rol: "coordinador", activo: true } }), true);
+  assert.equal(puedeCoordinar({ acceso: { rol: "coordinador", activo: false } }), false);
+  assert.equal(puedeCoordinar({ acceso: { rol: "empleado", activo: true } }), false);
+  assert.equal(puedeCoordinar({ acceso: null }), false);
 });
 
 test("ordenar por fecha: cronológico y con las vacías juntas", () => {

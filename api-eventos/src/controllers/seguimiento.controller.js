@@ -3,6 +3,7 @@ import { responderError } from "../utils/errores.js";
 import { esEnteroPositivo, esFechaValida } from "../utils/validaciones.js";
 import {
   CONDICION_SIN_REALIZAR,
+  TAREA_SIN_TERMINAR,
   SERVICIO_SIN_CONFIRMAR,
   JOIN_INDICADORES,
   COLUMNAS_INDICADORES,
@@ -73,7 +74,7 @@ export const obtenerResumen = async (req, res) => {
          (SELECT COUNT(*) FILTER (WHERE ${CONDICION_VENCIDA})::int
           FROM tareas t JOIN eventos e ON e.id_evento = t.id_evento
           WHERE e.id_empresa = $1 AND e.estado = ANY($3) AND ${enVentana(4)}) AS tareas_vencidas,
-         (SELECT COUNT(*) FILTER (WHERE t.estado_tarea <> 'completada' AND NOT ${CONDICION_SIN_REALIZAR})::int
+         (SELECT COUNT(*) FILTER (WHERE ${TAREA_SIN_TERMINAR} AND NOT ${CONDICION_SIN_REALIZAR})::int
           FROM tareas t JOIN eventos e ON e.id_evento = t.id_evento
           WHERE e.id_empresa = $1 AND e.estado = ANY($3) AND ${enVentana(4)}) AS tareas_pendientes,
          (SELECT COUNT(*) FILTER (WHERE ${CONDICION_SIN_REALIZAR})::int

@@ -14,7 +14,8 @@ Acordar previamente qué datos de prueba se pueden crear/modificar.
    filtros". Explicar la baja lógica.
 3. **Solicitud (1 min).** Crear un pedido con cliente, tipo, fecha, asistentes (hasta
    10.000), una sede del catálogo y preferencias. Usar “Crear cliente” si hace falta sin abandonar el pedido.
-4. **Presupuesto (2 min).** Agregar un servicio y proveedor. Mostrar costo total
+4. **Presupuesto (2 min).** Agregar un servicio y proveedor. El alquiler del salón, si se
+   cobra, es un servicio más con su importe para este evento. Mostrar costo total
    e importe total al cliente: cantidad informativa, margen y sumas desde la API.
    Presentar y abrir el link del cliente en una ventana de incógnito: no pide usuario
    ni muestra costos o proveedores. Responder, crear nueva versión y recorrer ambas.

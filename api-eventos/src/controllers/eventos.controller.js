@@ -1,6 +1,6 @@
 import pool from "../data/db.js";
 import { responderError } from "../utils/errores.js";
-import { esEmpleadoActivo, sedeDeEmpresa } from "../utils/consultas.js";
+import { puedeCoordinar, sedeDeEmpresa, leerLugarExterno } from "../utils/consultas.js";
 import {
   esIdValido,
   esFechaValida,
@@ -39,7 +39,7 @@ const MENSAJES = {
   presupuestoNoEncontrado: "Presupuesto no encontrado",
   fechaObligatoria: "La fecha del evento es obligatoria",
   fechaPasada: "La fecha del evento no puede ser anterior a hoy",
-  coordinadorInvalido: "El coordinador no es un empleado activo de la empresa",
+  coordinadorInvalido: "El coordinador tiene que ser un empleado activo con usuario de administrador o coordinador",
   noAceptable: "Solo se puede aceptar un presupuesto presentado",
   yaTieneEvento: "La solicitud ya tiene un evento",
   cerrado: MENSAJE_EVENTO_CERRADO,
@@ -108,7 +108,12 @@ const SELECT_EVENTO_DETALLE = `
            'id_presupuesto', p.id_presupuesto,
            'numero_version', p.numero_version,
            'importe_total', p.importe_total
-         ) AS presupuesto_aceptado
+         ) AS presupuesto_aceptado,
+         -- Lo acordado hoy: cambia con los servicios que se agregan, modifican o
+         -- cancelan. El presupuesto aceptado queda como se le ofrecio al cliente.
+         (SELECT COALESCE(SUM(sxt.importe_acordado_cliente), 0)::float8
+          FROM servicios_x_evento sxt
+          WHERE sxt.id_evento = e.id_evento AND sxt.estado_servicio = 'acordado') AS total_acordado
   FROM eventos e
   JOIN solicitudes s ON s.id_solicitud = e.id_solicitud
   JOIN clientes c ON c.id_cliente = s.id_cliente
@@ -189,7 +194,7 @@ const validarDatosEvento = async (body, fechaActual = null) => {
 // del token (regla 9): sin esto se podria asignar a alguien de otra empresa o
 // a un empleado dado de baja.
 const coordinadorValido = async (ejecutor, idCoordinador, idEmpresa) =>
-  esVacio(idCoordinador) || esEmpleadoActivo(ejecutor, idCoordinador, idEmpresa);
+  esVacio(idCoordinador) || puedeCoordinar(ejecutor, idCoordinador, idEmpresa);
 
 // El mismo cliente no puede tener dos eventos abiertos del mismo tipo el mismo
 // dia. Cruza dos tablas, asi que un indice no alcanza: el bloqueo por cliente
@@ -295,7 +300,14 @@ export const aceptarPresupuesto = async (req, res) => {
       return res.status(409).json({ mensaje: MENSAJES.eventoRepetido });
     }
 
-    // La sede es opcional, pero si viene tiene que ser del catalogo de la empresa
+    const { lugar, error: errorLugar } = leerLugarExterno(req.body);
+    if (errorLugar) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ mensaje: errorLugar });
+    }
+
+    // La sede es opcional, pero si viene tiene que ser del catalogo de la empresa,
+    // salvo que sea un lugar que reservo el cliente
     const sede = esVacio(id_sede) ? null : esIdValido(id_sede) ? await sedeDeEmpresa(client, id_sede, idEmpresa) : null;
     if (!esVacio(id_sede) && !sede) {
       await client.query("ROLLBACK");
@@ -341,7 +353,7 @@ export const aceptarPresupuesto = async (req, res) => {
         esVacio(id_empleado_coordinador) ? null : id_empleado_coordinador,
         fecha_evento_confirmada,
         sede?.id_sede ?? null,
-        sede?.nombre ?? null,
+        sede?.nombre ?? lugar,
         condiciones_acordadas ?? null
       ]
     );
@@ -482,11 +494,15 @@ export const editarEvento = async (req, res) => {
   if (!esVacio(body.id_sede) && !esIdValido(body.id_sede)) {
     return res.status(400).json({ mensaje: MENSAJES.sedeInvalida });
   }
+  const { lugar, error: errorLugar } = leerLugarExterno(body);
+  if (errorLugar) {
+    return res.status(400).json({ mensaje: errorLugar });
+  }
 
   const nuevo = {
     fecha_evento_confirmada: body.fecha_evento_confirmada,
     id_sede: esVacio(body.id_sede) ? null : Number(body.id_sede),
-    sede_acordada: null,
+    sede_acordada: lugar,
     condiciones_acordadas: textoONull(body.condiciones_acordadas),
     cantidad_asistentes: Number(body.cantidad_asistentes),
     id_empleado_coordinador: esVacio(body.id_empleado_coordinador)
@@ -521,8 +537,9 @@ export const editarEvento = async (req, res) => {
     if (errorDatos) return responder(400, errorDatos);
 
     // Misma sede: se conserva el nombre acordado aunque despues le hayan cambiado
-    // el nombre en el catalogo. Otra sede: tiene que estar activa.
-    if (nuevo.id_sede === evento.id_sede) {
+    // el nombre en el catalogo. Otra sede: tiene que estar activa. Sin sede, queda
+    // el lugar del cliente si vino, o a definir.
+    if (nuevo.id_sede !== null && nuevo.id_sede === evento.id_sede) {
       nuevo.sede_acordada = evento.sede_acordada;
     } else if (nuevo.id_sede !== null) {
       const sede = await sedeDeEmpresa(client, nuevo.id_sede, idEmpresa);

@@ -107,3 +107,29 @@ export const esEmpleadoActivo = async (ejecutor, idEmpleado, idEmpresa) => {
 
   return resultado.rows.length > 0;
 };
+
+// El salon que reservo el cliente por su cuenta: no es del catalogo, asi que va como
+// texto, sin id_sede. Por eso no entra en la regla de un evento por salon y por dia.
+// Devuelve { lugar } (texto o null) o { error }.
+export const leerLugarExterno = (body) => {
+  const valor = body?.lugar_externo;
+  if (valor === undefined || valor === null || valor === "") return { lugar: null };
+  if (typeof valor !== "string" || valor.trim().length > 200) return { error: "El lugar del evento no es valido" };
+  if (valor.trim() === "") return { lugar: null };
+  if (body.id_sede !== undefined && body.id_sede !== null && body.id_sede !== "") {
+    return { error: "Elegi una sede del catalogo o escribi el lugar del cliente, no los dos" };
+  }
+  return { lugar: valor.trim() };
+};
+
+// Coordinar un evento es operarlo: tiene que poder entrar con ese permiso. Un
+// empleado sin usuario, o con rol empleado, no podria abrir el evento.
+export const puedeCoordinar = async (ejecutor, idEmpleado, idEmpresa) => {
+  if (!(await esEmpleadoActivo(ejecutor, idEmpleado, idEmpresa))) return false;
+  const { rows } = await ejecutor.query(
+    `SELECT 1 FROM usuarios
+     WHERE id_empleado = $1 AND id_empresa = $2 AND activo = TRUE AND rol IN ('admin', 'coordinador')`,
+    [idEmpleado, idEmpresa]
+  );
+  return rows.length > 0;
+};

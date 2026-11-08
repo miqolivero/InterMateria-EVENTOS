@@ -18,7 +18,7 @@ import {
   plazoTerminado
 } from "../utils/indicadores.js";
 import { ESTADOS_EVENTO_ABIERTO, MENSAJE_EVENTO_CERRADO, SELECT_SERVICIO_EVENTO } from "./eventos.controller.js";
-import { SELECT_TAREA, ORDEN_TAREAS, ESTADOS_TAREA, responsableObligatorio, aplicarEstadoTarea } from "./tareas.controller.js";
+import { SELECT_TAREA, ORDEN_TAREAS, ESTADOS_TAREA, MENSAJE_CANCELAR_TAREA, responsableObligatorio, aplicarEstadoTarea } from "./tareas.controller.js";
 import { ESTADOS_PROVEEDOR, setEstadoProveedor } from "./serviciosEvento.controller.js";
 
 // Fase 11: lo que se lee del historial de cambios y de los compromisos a
@@ -42,7 +42,7 @@ const MENSAJES = {
 };
 
 const ETIQUETAS_ESTADO = {
-  pendiente: "Pendiente", en_curso: "En curso", completada: "Completada",
+  pendiente: "Pendiente", en_curso: "En curso", completada: "Completada", cancelada: "Cancelada",
   confirmado: "Confirmado", completado: "Completado", rechazado: "Rechazado"
 };
 const fechaLegible = (fecha) => fecha ? fecha.split("-").reverse().join("/") : "sin fecha";
@@ -195,6 +195,9 @@ export const revisarAfectado = async (req, res) => {
   if (idEmpleado !== null && (body.fecha_prevista != null || body.id_empleado_responsable != null)) {
     return res.status(403).json({ mensaje: MENSAJES.soloEstado });
   }
+  if (idEmpleado !== null && body.estado_tarea === "cancelada") {
+    return res.status(403).json({ mensaje: MENSAJE_CANCELAR_TAREA });
+  }
   if ((body.estado_tarea != null && !ESTADOS_TAREA.includes(body.estado_tarea))
     || (body.estado_proveedor != null && !ESTADOS_PROVEEDOR.includes(body.estado_proveedor))) {
     return res.status(400).json({ mensaje: MENSAJES.estadoInvalido });
@@ -231,6 +234,9 @@ export const revisarAfectado = async (req, res) => {
     if (!afectado) error = [404, MENSAJES.revisionNoEncontrada];
     else if (!ESTADOS_EVENTO_ABIERTO.includes(afectado.estado_evento)) error = [409, MENSAJE_EVENTO_CERRADO];
     else if (afectado.revisado) error = [409, MENSAJES.yaRevisado];
+    else if (idEmpleado !== null && afectado.estado_actual === "cancelada" && body.estado_tarea != null && body.estado_tarea !== "cancelada") {
+      error = [403, MENSAJE_CANCELAR_TAREA];
+    }
     else if (afectado.id_tarea ? body.estado_proveedor != null
       : body.fecha_prevista != null || body.id_empleado_responsable != null || body.estado_tarea != null) {
       error = [400, MENSAJES.camposAjenos];

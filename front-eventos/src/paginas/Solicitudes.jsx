@@ -71,7 +71,7 @@ export function SolicitudDetalle() {
       { key: "fecha", label: "Fecha prevista", children: formatearFecha(solicitud.fecha_evento_prevista) },
       { key: "alta", label: "Solicitud recibida", children: formatearFecha(solicitud.fecha_solicitud) },
       { key: "asistentes", label: "Asistentes", children: solicitud.cantidad_asistentes },
-      { key: "sede", label: "Sede prevista", children: solicitud.sede_prevista || "—" },
+      { key: "sede", label: "Sede prevista", children: solicitud.sede_prevista ? <Space size={4} wrap>{solicitud.sede_prevista}{!solicitud.id_sede && <Tag>Lo reservó el cliente</Tag>}</Space> : "—" },
       { key: "contacto", label: "Contacto", children: [solicitud.cliente?.email, solicitud.cliente?.telefono].filter(Boolean).join(" · ") || "—" },
       { key: "preferencias", label: "Preferencias", children: solicitud.preferencias || "—" }
     ]} /></Card>

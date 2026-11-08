@@ -2,7 +2,7 @@ import { useCallback, useState } from "react";
 import { Alert, Button, Card, Checkbox, DatePicker, Form, Input, InputNumber, Modal, Select, Space, Table, Tag } from "antd";
 import { PlusOutlined } from "@ant-design/icons";
 import { serviciosEvento, estadoProveedor, modificarServicio, cambiarProveedor, cancelarServicio, agregarServicio,
-  generarTareas } from "../servicios/operacionService.js";
+  generarTareas, tareasEvento } from "../servicios/operacionService.js";
 import { listarCatalogo } from "../servicios/catalogosService.js";
 import { useConsulta } from "../contexto/useConsulta.js";
 import { useAccion } from "../contexto/useAccion.js";
@@ -48,7 +48,8 @@ function AgregarServicio({ idEvento, cerrar, guardado }) {
   const [idServicio, setIdServicio] = useState(null);
   return <ModalCambio titulo="Agregar servicio" idEvento={idEvento} cerrar={cerrar} guardado={guardado} okText="Agregar"
     valoresIniciales={{ cantidad: 1, costo_acordado_proveedor: 0 }}
-    aviso="Nace con el proveedor pendiente, así que ya aparece como “sin confirmar”."
+    aviso="Cargalo solo cuando el cliente ya aceptó el importe y las condiciones: desde ese momento es parte de lo acordado. Si todavía espera su respuesta, no lo cargues. Queda con el proveedor pendiente, como “sin confirmar”."
+    ayudaMotivo="Por ejemplo: quién lo pidió y cuándo aceptó el cliente."
     operacion={(v) => agregarServicio(idEvento, { id_servicio: v.id_servicio, id_proveedor: v.id_proveedor ?? null, descripcion: v.descripcion?.trim() || null,
       cantidad: v.cantidad, costo_acordado_proveedor: v.costo_acordado_proveedor, importe_acordado_cliente: v.importe_acordado_cliente,
       motivo: v.motivo, tareas_afectadas: v.tareas_afectadas })}>
@@ -59,6 +60,26 @@ function AgregarServicio({ idEvento, cerrar, guardado }) {
     {idServicio && <SelectProveedor key={idServicio} idServicio={idServicio} />}
     <Form.Item name="descripcion" label="Descripción"><Input maxLength={300} /></Form.Item>
     {camposImportes}
+    {/* La aceptación es por fuera del sistema: acá solo se deja dicho que ya pasó */}
+    <Form.Item name="cliente_acepto" valuePropName="checked" rules={[{ validator: (_, v) => v ? Promise.resolve() : Promise.reject(new Error("Sin la aceptación del cliente, el servicio no se carga.")) }]}>
+      <Checkbox>El cliente ya aceptó el importe y las condiciones</Checkbox></Form.Item>
+  </ModalCambio>;
+}
+
+// Las tareas sin terminar del servicio vienen tildadas: cancelarlas es un clic, pero
+// lo decide la persona. Sin tildar, siguen como están.
+function CancelarServicio({ idEvento, servicio, cerrar, guardado }) {
+  const tareas = useConsulta(useCallback(async () => (await tareasEvento(idEvento)).data, [idEvento]));
+  if (tareas.cargando) return null;
+  const cancelables = (tareas.datos || []).filter((t) => t.id_servicio_x_evento === servicio.id_servicio_x_evento
+    && !["completada", "cancelada"].includes(t.estado_tarea) && !t.plazo_terminado);
+  return <ModalCambio titulo={`Cancelar ${servicio.nombre_servicio}`} idEvento={idEvento} cerrar={cerrar} guardado={guardado} okText="Cancelar servicio"
+    aviso="El servicio no se borra: sigue a la vista y en el historial. Las tareas ya completadas no se tocan."
+    valoresIniciales={{ tareas_canceladas: cancelables.map((t) => t.id_tarea) }}
+    operacion={(v) => cancelarServicio(servicio.id_servicio_x_evento, { motivo: v.motivo, tareas_afectadas: v.tareas_afectadas, tareas_canceladas: v.tareas_canceladas || [] })}>
+    <ErrorConsulta {...tareas} />
+    {cancelables.length > 0 && <Form.Item name="tareas_canceladas" label="Tareas de este servicio que se cancelan" extra="Destildá las que quieras mantener.">
+      <Checkbox.Group className="lista-tareas-afectadas" options={cancelables.map((t) => ({ value: t.id_tarea, label: `${t.descripcion} · ${t.nombre_responsable || "Sin responsable"}` }))} /></Form.Item>}
   </ModalCambio>;
 }
 
@@ -101,7 +122,7 @@ function EstadoProveedor({ servicio, editable, actualizado }) {
     onChange={async (estado) => { const r = await ejecutar(() => estadoProveedor(servicio.id_servicio_x_evento, { estado_proveedor: estado }), "Estado del proveedor actualizado."); if (r.ok) actualizado(); }} />;
 }
 
-export default function ServiciosEvento({ id, editable, actualizado }) {
+export default function ServiciosEvento({ id, editable, actualizado, totalAcordado }) {
   const consulta = useConsulta(useCallback(async () => (await serviciosEvento(id)).data, [id]));
   const [accion, setAccion] = useState(null);
   const recargar = () => { consulta.recargar(); actualizado?.(); };
@@ -127,7 +148,7 @@ export default function ServiciosEvento({ id, editable, actualizado }) {
   const s = accion?.servicio;
   return <><ErrorConsulta {...consulta} />
     <Alert type="info" showIcon className="aviso-formulario" title="El estado del proveedor es seguimiento: se cambia sin motivo. Modificar lo acordado, cambiar el proveedor o cancelar queda en el historial con su motivo." />
-    <Card extra={editable && <Button type="primary" icon={<PlusOutlined />} onClick={() => setAccion({ tipo: "agregar" })}>Agregar servicio</Button>}>
+    <Card title={`Total acordado: ${formatearMoneda(totalAcordado)}`} extra={editable && <Button type="primary" icon={<PlusOutlined />} onClick={() => setAccion({ tipo: "agregar" })}>Agregar servicio</Button>}>
       <Table rowKey="id_servicio_x_evento" dataSource={consulta.datos || []} loading={consulta.cargando} columns={columnas} scroll={{ x: 1100 }}
         pagination={false} rowClassName={(fila) => fila.estado_servicio === "cancelado" ? "servicio-cancelado" : ""} /></Card>
     {accion?.tipo === "agregar" && <AgregarServicio idEvento={id} cerrar={cerrar} guardado={recargar} />}
@@ -143,8 +164,6 @@ export default function ServiciosEvento({ id, editable, actualizado }) {
       operacion={(v) => cambiarProveedor(s.id_servicio_x_evento, { id_proveedor: v.id_proveedor ?? null, motivo: v.motivo, tareas_afectadas: v.tareas_afectadas })}>
       <SelectProveedor idServicio={s.id_servicio} actual={s.nombre_proveedor} />
     </ModalCambio>}
-    {accion?.tipo === "cancelar" && <ModalCambio titulo={`Cancelar ${s.nombre_servicio}`} idEvento={id} cerrar={cerrar} guardado={recargar} okText="Cancelar servicio"
-      aviso="El servicio no se borra: sigue a la vista y en el historial. Sus tareas no se cancelan solas; marcá las que haya que revisar."
-      operacion={(v) => cancelarServicio(s.id_servicio_x_evento, { motivo: v.motivo, tareas_afectadas: v.tareas_afectadas })} />}
+    {accion?.tipo === "cancelar" && <CancelarServicio idEvento={id} servicio={s} cerrar={cerrar} guardado={recargar} />}
   </>;
 }

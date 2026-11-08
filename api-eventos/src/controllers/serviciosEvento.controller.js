@@ -24,7 +24,8 @@ import {
 import {
   SELECT_TAREA,
   objetoServicioEmpleado,
-  responsableObligatorio
+  responsableObligatorio,
+  aplicarEstadoTarea
 } from "./tareas.controller.js";
 import {
   validarFormatoRenglon,
@@ -182,7 +183,8 @@ const resumirCampos = (datos, campos) =>
 // ---------------------------------------------------------------------------
 
 // POST /api/eventos/:id/servicios
-// Un servicio nuevo despues de confirmar. Nace con el proveedor 'pendiente'
+// Un servicio nuevo despues de confirmar, que el cliente ya acepto por fuera del
+// sistema: lo que se esta conversando no se carga. Nace con el proveedor 'pendiente'
 // (DEFAULT), asi que ya cuenta como "sin confirmar": no hace falta marcarlo.
 export const agregarServicioEvento = async (req, res) => {
   const idEmpresa = req.usuario.id_empresa;
@@ -411,8 +413,9 @@ export const cambiarProveedor = async (req, res) => {
 };
 
 // PATCH /api/servicios-evento/:id/cancelar
-// Quita el servicio SIN borrarlo. Sus tareas no se cancelan ni se borran
-// solas: las que el usuario elige quedan a revisar, y el resto sigue igual.
+// Quita el servicio SIN borrarlo. Sus tareas no se cancelan ni se borran solas: se
+// cancelan las que el usuario elige (tareas_canceladas), las que marca quedan a
+// revisar y el resto sigue igual.
 export const cancelarServicio = async (req, res) => {
   const idEmpresa = req.usuario.id_empresa;
   const body = req.body ?? {};
@@ -429,17 +432,35 @@ export const cancelarServicio = async (req, res) => {
     const validacion = await validarMotivoYTareas(client, body, servicio.id_evento);
     if (validacion.error) return validacion;
 
+    // Solo tareas de este servicio que sigan sin terminar: lo hecho, hecho esta
+    const aCancelar = leerTareasAfectadas(body.tareas_canceladas);
+    const cancelables = aCancelar && await client.query(
+      `SELECT COUNT(*)::int AS cantidad FROM tareas
+       WHERE id_servicio_x_evento = $1 AND id_tarea = ANY($2::int[])
+         AND estado_tarea NOT IN ('completada', 'cancelada')`,
+      [req.params.id, aCancelar]
+    );
+    if (!aCancelar || cancelables.rows[0].cantidad !== aCancelar.length) {
+      return { error: { status: 400, mensaje: "Alguna de las tareas no se puede cancelar con este servicio" } };
+    }
+
     await client.query(
       "UPDATE servicios_x_evento SET estado_servicio = 'cancelado' WHERE id_servicio_x_evento = $1",
       [req.params.id]
     );
+
+    for (const idTarea of aCancelar) {
+      if (!(await aplicarEstadoTarea(client, idTarea, "cancelada", req.usuario.id))) {
+        return { error: { status: 409, mensaje: "El evento ya paso y sus tareas no se pueden modificar" } };
+      }
+    }
 
     const idCambio = await registrarCambio(client, {
       idEvento: servicio.id_evento,
       idUsuario: req.usuario.id,
       tipo: "servicio_cancelado",
       idServicioEvento: servicio.id_servicio_x_evento,
-      descripcion: `Se cancelo el servicio ${servicio.nombre_servicio}`,
+      descripcion: `Se cancelo el servicio ${servicio.nombre_servicio}${aCancelar.length > 0 ? ` y ${aCancelar.length} ${aCancelar.length === 1 ? "tarea" : "tareas"}` : ""}`,
       valorAnterior: "acordado",
       valorNuevo: "cancelado",
       motivo: body.motivo

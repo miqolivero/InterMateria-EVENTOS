@@ -34,7 +34,7 @@ export const estados = {
 
 // Las opciones del filtro de estado de las tareas
 export const opcionesEstadoTarea = ({ conVencida = false } = {}) => [
-  ...(conVencida ? ["sin_completar"] : []), ...["pendiente", "en_curso", "completada"], ...(conVencida ? ["vencida"] : []), "sin_realizar"
+  ...(conVencida ? ["sin_completar"] : []), ...["pendiente", "en_curso", "completada"], ...(conVencida ? ["vencida"] : []), "sin_realizar", "cancelada"
 ].map((value) => ({ value, label: estados[value].texto }));
 
 // Fase 11: los 4 estados del proveedor. pendiente, confirmado y rechazado

@@ -13,7 +13,7 @@ export default function CierreEvento({ evento, actualizado }) {
   const [confirmar, setConfirmar] = useState(null);
   const pendientes = useConsulta(useCallback(async () => {
     const [tareas, servicios] = await Promise.all([tareasEvento(evento.id_evento), serviciosEvento(evento.id_evento)]);
-    return { tareas: tareas.data.filter((t) => t.estado_tarea !== "completada").length,
+    return { tareas: tareas.data.filter((t) => !["completada", "cancelada"].includes(t.estado_tarea)).length,
       // Misma definicion que la API (Fase 11): acordado y sin un proveedor
       // confirmado o completado. Los cancelados no cuentan.
       servicios: servicios.data.filter((s) => s.estado_servicio === "acordado" && (!s.id_proveedor || !["confirmado", "completado"].includes(s.estado_proveedor))).length };

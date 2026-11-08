@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { Badge, Button, Calendar, Card, DatePicker, Descriptions, Input, Select, Skeleton, Space, Table, Tabs } from "antd";
+import { Badge, Button, Calendar, Card, DatePicker, Descriptions, Input, Select, Skeleton, Space, Table, Tabs, Tag } from "antd";
 import { listarEventos, obtenerEvento, editarEvento, iniciarPreparacion, resumenEvento } from "../servicios/operacionService.js";
 import { listarCatalogo } from "../servicios/catalogosService.js";
 import { useConsulta } from "../contexto/useConsulta.js";
@@ -70,25 +70,30 @@ export function EventoDetalle() {
   if (consulta.error) return <ErrorConsulta {...consulta} />;
   const e = consulta.datos;
   const editable = e.editable === true && ["confirmado", "en_preparacion"].includes(e.estado);
+  // Los eventos no tienen nombre propio: los identifican el cliente y el tipo
+  const nombreEvento = `${nombreCompleto(e.cliente)} · ${e.solicitud?.nombre_tipo_evento}`;
+  const diferencia = e.total_acordado - (e.presupuesto_aceptado?.importe_total ?? 0);
   const resumen = <><Card title="Avance" className="aviso-formulario" loading={indicadores.cargando}><ErrorConsulta {...indicadores} />
     <Indicadores indicadores={indicadores.datos} /></Card><Card><Descriptions column={{ xs: 1, md: 2 }} items={[
     { key: "cliente", label: "Cliente", children: nombreCompleto(e.cliente) },
     { key: "contacto", label: "Contacto", children: [e.cliente?.email, e.cliente?.telefono].filter(Boolean).join(" · ") || "—" },
     { key: "tipo", label: "Tipo", children: e.solicitud?.nombre_tipo_evento },
     { key: "fecha", label: "Fecha", children: formatearFecha(e.fecha_evento_confirmada) },
-    { key: "sede", label: "Sede", children: e.sede_acordada || "—" },
+    { key: "sede", label: "Sede", children: e.sede_acordada ? <Space size={4} wrap>{e.sede_acordada}{!e.id_sede && <Tag>Lo reservó el cliente</Tag>}</Space> : "—" },
     { key: "asistentes", label: "Asistentes", children: e.cantidad_asistentes },
     { key: "coordinador", label: "Coordinador", children: nombreCompleto(e.coordinador) },
     { key: "condiciones", label: "Condiciones", children: e.condiciones_acordadas || "—" },
     { key: "preferencias", label: "Preferencias", children: e.solicitud?.preferencias || "—" },
     { key: "solicitud", label: "Solicitud", children: e.solicitud && <Link to={`/solicitudes/${e.solicitud.id_solicitud}`}>Ver solicitud</Link> },
     { key: "presupuesto", label: "Presupuesto aceptado", children: e.presupuesto_aceptado && <Link to={`/presupuestos/${e.presupuesto_aceptado.id_presupuesto}`}>
-      Versión {e.presupuesto_aceptado.numero_version} · {formatearMoneda(e.presupuesto_aceptado.importe_total)}</Link> }
+      Versión {e.presupuesto_aceptado.numero_version} · {formatearMoneda(e.presupuesto_aceptado.importe_total)}</Link> },
+    { key: "total", label: "Total acordado hoy", children: <Space size={4} wrap>{formatearMoneda(e.total_acordado)}
+      {diferencia !== 0 && <Tag color="orange">{diferencia > 0 ? "+" : "−"}{formatearMoneda(Math.abs(diferencia))} respecto del presupuesto</Tag>}</Space> }
   ]} /></Card></>;
   const pendientes = indicadores.datos?.pendientes_revision || 0;
   return <>
     <Link className="enlace-volver" to="/eventos">Volver a eventos</Link>
-    <EncabezadoPagina titulo={`Evento #${id}`} acciones={<Space wrap><EstadoTag estado={e.estado} />
+    <EncabezadoPagina titulo={nombreEvento} descripcion={`${formatearFecha(e.fecha_evento_confirmada)} · Evento #${id}`} acciones={<Space wrap><EstadoTag estado={e.estado} />
       {indicadores.datos?.alerta && <Badge status="error" text="Atención" />}
       {editable && <Button onClick={() => setEditor(true)}>Cambiar lo acordado</Button>}
       {editable && e.estado === "confirmado" && <Button type="primary" loading={ocupado} onClick={async () => {
@@ -97,13 +102,13 @@ export function EventoDetalle() {
     </Space>} />
     <Tabs type="card" activeKey={pestana} onChange={setPestana} items={[
       { key: "resumen", label: "Resumen", children: resumen },
-      { key: "servicios", label: "Servicios", children: <ServiciosEvento id={id} editable={editable} actualizado={actualizar} /> },
+      { key: "servicios", label: "Servicios", children: <ServiciosEvento id={id} editable={editable} actualizado={actualizar} totalAcordado={e.total_acordado} /> },
       { key: "tareas", label: "Tareas", children: <TareasEvento key={version} id={id} editable={editable} /> },
       { key: "revisiones", label: <Badge count={pendientes} size="small" offset={[8, -2]}>A revisar</Badge>,
         children: <RevisionesPendientes key={version} idEvento={id} editable={editable} actualizado={actualizar} /> },
       { key: "historial", label: "Historial", children: <HistorialCambios key={version} idEvento={id} /> },
       { key: "cierre", label: "Cierre", children: <CierreEvento evento={e} actualizado={actualizar} /> }
     ]} />
-    {editor && <EditorEvento datos={e} conCambio titulo="Cambiar lo acordado" operacion={(body) => editarEvento(id, body)} cerrar={() => setEditor(false)} guardado={actualizar} />}
+    {editor && <EditorEvento datos={e} conCambio titulo={`Cambiar lo acordado · ${nombreEvento}`} operacion={(body) => editarEvento(id, body)} cerrar={() => setEditor(false)} guardado={actualizar} />}
   </>;
 }
